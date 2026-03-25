@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -24,9 +25,11 @@ public class ClientApp {
         Properties appProps = loadProperties("app.properties");
         int tps = Integer.parseInt(appProps.getProperty("tps", "100"));
         int prod = Integer.parseInt(appProps.getProperty("prod", "1"));
+        int len = Integer.parseInt(appProps.getProperty("len", "100"));
         final int finalTps = tps;
         final int finalProd = prod;
-        System.out.printf("Client starting: tps=%d prod=%d%n", finalTps, finalProd);
+        final int finalLen = len;
+        System.out.printf("Client starting: tps=%d prod=%d len=%d%n", finalTps, finalProd, finalLen);
 
         ClientApplication application = new ClientApplication();
 
@@ -55,15 +58,7 @@ public class ClientApp {
                 Thread.sleep(100);
             }
             final SessionID sessionID = sid;
-            NewOrderSingle template = new NewOrderSingle(
-                    new ClOrdID("ORDER"),
-                    new HandlInst('1'),
-                    new Symbol("AAPL"),
-                    new Side(Side.BUY),
-                    new TransactTime(),
-                    new OrdType(OrdType.MARKET)
-            );
-            template.set(new OrderQty(100));
+                NewOrderSingle template = ClientMessageSizer.buildTemplate(finalLen, ThreadLocalRandom.current());
 
             // Wait for logon
             System.out.println("Waiting for session logon...");

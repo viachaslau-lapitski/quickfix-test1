@@ -18,6 +18,8 @@ repositories {
 dependencies {
     implementation 'org.quickfixj:quickfixj-all:2.3.2'
     implementation 'io.micrometer:micrometer-core:1.12.5'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 jar {
@@ -34,4 +36,12 @@ shadowJar {
         attributes 'Main-Class': 'com.perf.client.ClientApp'
     }
     mergeServiceFiles()
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.named('shadowJar') {
+    dependsOn test
 }

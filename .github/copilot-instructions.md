@@ -64,6 +64,8 @@ Both use `MemoryStoreFactory` (no disk I/O) and a custom no-op `LogFactory` to m
 
 **QuickFIX/J config**: Session parameters live in `src/main/resources/server.cfg` / `client.cfg` (ini-style). `UseDataDictionary=N` is set deliberately to skip validation overhead.
 
-**Single dependency**: Both modules depend only on `org.quickfixj:quickfixj-all:2.3.2`. Keep the dependency footprint minimal.
+**Dependency footprint**: `quickfix-server` depends only on `org.quickfixj:quickfixj-all:2.3.2`. `quickfix-client` also uses Micrometer (`io.micrometer:micrometer-core`) for p95 latency reporting. Keep dependencies minimal.
+
+**Latency reporting**: Client reports `p95_ms` (95th percentile `sendToTarget` latency) once per second using a Micrometer `Timer`.
 
 **Fat JARs only**: The Shadow plugin (`com.github.johnrengelman.shadow`) produces self-contained JARs with `mergeServiceFiles()` — required for QuickFIX/J's service loader entries to work correctly.

@@ -72,12 +72,18 @@ java -jar quickfix-client/build/libs/quickfix-client-all.jar --tps=50 --prod=2
 Both sides print a line every second:
 
 ```
-iter #1  total=50  diff=50/s
-iter #2  total=100  diff=50/s
+[Client] iter=48    total=720000     diff=15000      p95_ms=0.004
+[Client] iter=49    total=735000     diff=15000      p95_ms=0.004
+[Client] iter=50    total=750000     diff=15000      p95_ms=0.004
+[Client] iter=51    total=765000     diff=15000      p95_ms=0.004
+[Client] iter=52    total=780000     diff=15000      p95_ms=0.004
+[Client] iter=53    total=795000     diff=15000      p95_ms=0.004
+[Client] iter=54    total=810385     diff=15385      p95_ms=0.004
+[Client] iter=55    total=825480     diff=15095      p95_ms=0.004
 ...
 ```
 
-- **client** — messages sent
+- **client** — messages sent plus `p95_ms` (95th percentile `sendToTarget` latency)
 - **server** — messages received
 
 Stop both processes with `Ctrl+C`; shutdown hooks cleanly disconnect the FIX session.

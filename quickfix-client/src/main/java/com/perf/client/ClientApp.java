@@ -94,7 +94,7 @@ public class ClientApp {
             iteration[0]++;
             long total = counter.get();
             long diff = total - lastCount.getAndSet(total);
-            System.out.printf("[Client] iter=%d  total=%d  diff=%d%n", iteration[0], total, diff);
+            System.out.printf("[Client] iter=%-4d  total=%-9d  diff=%-9d%n", iteration[0], total, diff);
         }, 1, 1, TimeUnit.SECONDS);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

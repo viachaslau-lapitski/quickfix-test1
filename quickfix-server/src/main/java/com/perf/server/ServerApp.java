@@ -40,7 +40,7 @@ public class ServerApp {
             iteration[0]++;
             long total = counter.get();
             long diff = total - lastCount.getAndSet(total);
-            System.out.printf("[Server] iter=%d  total=%d  diff=%d%n", iteration[0], total, diff);
+            System.out.printf("[Server] iter=%-4d  total=%-9d  diff=%-9d%n", iteration[0], total, diff);
         }, 1, 1, TimeUnit.SECONDS);
 
         CountDownLatch latch = new CountDownLatch(1);

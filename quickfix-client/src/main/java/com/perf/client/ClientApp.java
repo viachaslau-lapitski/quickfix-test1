@@ -3,6 +3,9 @@ package com.perf.client;
 import quickfix.*;
 import quickfix.field.*;
 import quickfix.fix42.NewOrderSingle;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.distribution.ValueAtPercentile;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.InputStream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -68,6 +71,12 @@ public class ClientApp {
         System.out.println("Session established, starting load generators");
 
         AtomicLong counter = new AtomicLong(0);
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        Timer sendTimer = Timer.builder("client.sendToTarget")
+            .publishPercentiles(0.95)
+            .publishPercentileHistogram()
+            .register(meterRegistry);
+        AtomicLong lastP95Nanos = new AtomicLong(0);
         int msgsPerProd = finalTps;
 
         ScheduledExecutorService[] producers = new ScheduledExecutorService[finalProd];
@@ -79,7 +88,10 @@ public class ClientApp {
                         NewOrderSingle msg = (NewOrderSingle) template.clone();
                         msg.set(new TransactTime());
                         counter.incrementAndGet();
+                        long start = System.nanoTime();
                         Session.sendToTarget(msg, sessionID);
+                        long elapsed = System.nanoTime() - start;
+                        sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
                     } catch (Exception e) {
                         // ignore send errors in perf test
                     }
@@ -89,17 +101,36 @@ public class ClientApp {
 
         AtomicLong lastCount = new AtomicLong(0);
         long[] iteration = {0};
+        ScheduledExecutorService p95Sampler = Executors.newSingleThreadScheduledExecutor();
+        p95Sampler.scheduleAtFixedRate(() -> {
+            long p95Nanos = 0;
+            ValueAtPercentile[] percentiles = sendTimer.takeSnapshot().percentileValues();
+            for (ValueAtPercentile p : percentiles) {
+                if (p.percentile() == 0.95) {
+                    p95Nanos = (long) p.value();
+                    break;
+                }
+            }
+            if (p95Nanos > 0) {
+                lastP95Nanos.set(p95Nanos);
+            }
+        }, 1, 1, TimeUnit.SECONDS);
+
         ScheduledExecutorService reporter = Executors.newSingleThreadScheduledExecutor();
         reporter.scheduleAtFixedRate(() -> {
             iteration[0]++;
             long total = counter.get();
             long diff = total - lastCount.getAndSet(total);
-            System.out.printf("[Client] iter=%-4d  total=%-9d  diff=%-9d%n", iteration[0], total, diff);
+                long p95Nanos = lastP95Nanos.get();
+                double p95Millis = p95Nanos / 1_000_000.0;
+                System.out.printf("[Client] iter=%-4d  total=%-9d  diff=%-9d  p95_ms=%-8.3f%n",
+                    iteration[0], total, diff, p95Millis);
         }, 1, 1, TimeUnit.SECONDS);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Client shutting down...");
             reporter.shutdown();
+            p95Sampler.shutdown();
             for (ScheduledExecutorService p : producers) p.shutdown();
             try { initiator.stop(true); } catch (Exception e) { /* ignore */ }
         }));

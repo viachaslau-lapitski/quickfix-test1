@@ -17,6 +17,7 @@ repositories {
 
 dependencies {
     implementation 'org.quickfixj:quickfixj-all:2.3.2'
+    implementation 'io.micrometer:micrometer-core:1.12.5'
 }
 
 jar {

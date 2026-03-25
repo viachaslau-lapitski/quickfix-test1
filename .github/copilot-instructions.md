@@ -9,17 +9,23 @@ A minimal FIX 4.2 throughput benchmarking harness built on QuickFIX/J 2.3.2. Two
 
 ## Build Commands
 
-Each module is built independently using its own Gradle wrapper:
+Build both modules at once from the repo root using the root Gradle wrapper:
 
 ```bash
-# Build fat JARs (run from repo root)
-cd quickfix-server && ./gradlew shadowJar
-cd quickfix-client && ./gradlew shadowJar
+# Build both fat JARs in one step (run from repo root)
+./gradlew shadowJar
 ```
 
 Output artifacts:
 - `quickfix-server/build/libs/quickfix-server-all.jar`
 - `quickfix-client/build/libs/quickfix-client-all.jar`
+
+Individual modules can still be built independently:
+
+```bash
+cd quickfix-server && ./gradlew shadowJar
+cd quickfix-client && ./gradlew shadowJar
+```
 
 There are no tests — validation is manual (run both JARs, observe console throughput output).
 

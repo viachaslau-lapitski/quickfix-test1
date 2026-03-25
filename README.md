@@ -25,12 +25,19 @@ quickfix-client  ──── FIX 4.2 / TCP :9876 ────▶  quickfix-serv
 
 ## Build
 
+**Both modules at once** (from repo root):
+
+```bash
+./gradlew shadowJar
+# → quickfix-server/build/libs/quickfix-server-all.jar
+# → quickfix-client/build/libs/quickfix-client-all.jar
+```
+
+**Individual modules** (still supported):
+
 ```bash
 cd quickfix-server && ./gradlew shadowJar
-# → build/libs/quickfix-server-all.jar
-
 cd quickfix-client && ./gradlew shadowJar
-# → build/libs/quickfix-client-all.jar
 ```
 
 ## Run

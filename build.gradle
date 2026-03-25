@@ -1,0 +1,2 @@
+// Root build — run `./gradlew shadowJar` from here to build fat JARs for both subprojects.
+// Individual modules can still be built in isolation via their own ./gradlew wrappers.

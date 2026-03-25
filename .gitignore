@@ -1,0 +1,32 @@
+# Gradle build output
+build/
+.gradle/
+
+# IDE output (Eclipse)
+bin/
+
+# Binary artifacts
+*.jar
+*.class
+*.war
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+out/
+
+# Eclipse
+.eclipse
+.settings/
+.classpath
+.project
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

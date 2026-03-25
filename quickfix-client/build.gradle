@@ -1,0 +1,36 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'com.perf'
+version = '1.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.quickfixj:quickfixj-all:2.3.2'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.perf.client.ClientApp'
+    }
+}
+
+shadowJar {
+    archiveBaseName = 'quickfix-client'
+    archiveClassifier = 'all'
+    archiveVersion = ''
+    manifest {
+        attributes 'Main-Class': 'com.perf.client.ClientApp'
+    }
+    mergeServiceFiles()
+}

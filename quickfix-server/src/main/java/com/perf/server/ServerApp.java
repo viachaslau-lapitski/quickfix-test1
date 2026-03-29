@@ -6,6 +6,8 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -35,7 +37,11 @@ public class ServerApp {
                 application, storeFactory, settings, logFactory, messageFactory);
 
         acceptor.start();
-        System.out.println("Server started, listening on port 9876");
+        List<String> ports = new ArrayList<>();
+        for (SessionID sid : acceptor.getSessions()) {
+            try { ports.add(settings.getString(sid, "SocketAcceptPort")); } catch (Exception ignored) {}
+        }
+        System.out.println("Server started, listening on port(s): " + String.join(", ", ports));
 
         AtomicLong lastCount = new AtomicLong(0);
         long[] iteration = {0};

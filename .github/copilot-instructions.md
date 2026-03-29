@@ -4,7 +4,7 @@
 
 A minimal FIX 4.2 throughput benchmarking harness built on QuickFIX/J 2.3.2. Two independent Java 17 console applications:
 
-- **quickfix-server** — FIX acceptor listening on `localhost:9876`, counts inbound messages
+- **quickfix-server** — FIX acceptor; with `run/server.cfg` listens on `localhost:9876` (plain) and `localhost:9877` (mTLS), counts inbound messages
 - **quickfix-client** — FIX initiator that drives configurable message throughput, controlled via `app.properties`
 
 ## Build Commands
@@ -44,8 +44,10 @@ java -jar quickfix-server/build/libs/quickfix-server-all.jar
 # Terminal 2 — start client (reads app.properties from cwd or classpath)
 java -jar quickfix-client/build/libs/quickfix-client-all.jar
 
-# Or use the run script for multi-run benchmarks
-./run/run.sh --timeout=60 --runs=3 --pause=5
+# Or use the run scripts for multi-run benchmarks
+./run/run-server.sh                            # Terminal 1
+./run/run-client.sh --timeout=60 --runs=3      # Terminal 2, plain TCP
+./run/run-client.sh --ssl --timeout=60         # Terminal 2, mTLS (port 9877)
 ```
 
 There are no `--tps` / `--prod` CLI flags. All client tuning is done via `app.properties` (see Configuration section).
@@ -100,18 +102,26 @@ QuickFIX/J session parameters live in `src/main/resources/server.cfg` / `client.
 
 ```
 run/
-├── client.cfg         — local FIX config: FileStorePath=./store, FileLogPath=./logs, FileStoreSync=N
-├── app.properties     — example heavy config: tps=5000, prod=1, len=5000, store=file, log=file
-└── run.sh             — bash launcher for the client JAR
+├── run-server.sh      — launches quickfix-server JAR (run from repo root or any dir)
+├── run-client.sh      — launches quickfix-client JAR; picks up local client.cfg & app.properties
+├── client-plain.cfg   — FIX initiator config: plain TCP, port 9876, SenderCompID=CLIENT
+├── client-ssl.cfg     — FIX initiator config: mTLS, port 9877, SenderCompID=CLIENT_SSL
+├── server.cfg         — FIX acceptor config: two sessions (plain :9876 + mTLS :9877)
+├── app.properties     — client tuning: tps, prod, len, store, log
+├── gen-certs.sh       — keytool script: regenerates run/certs/ (idempotent)
+└── certs/             — committed self-signed JKS keystores (password: changeit)
+    ├── server.keystore / server.truststore
+    └── client.keystore / client.truststore
 ```
 
-`run.sh` locates the JAR at `../quickfix-client/build/libs/quickfix-client-all.jar` (relative to the script) and runs from the `run/` directory so the local `client.cfg` and `app.properties` are picked up automatically.
+`run-server.sh` runs from the `run/` directory so relative keystore paths in `server.cfg` resolve correctly. `run-client.sh` copies `client-plain.cfg` or `client-ssl.cfg` over `client.cfg` before launch (the copied file is gitignored).
 
-**run.sh flags:**
+**run-client.sh flags:**
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--timeout=N` | `65` | Seconds per run; `0` = unlimited. Uses `gtimeout` (macOS) or `timeout` (Linux) |
+| `--ssl` | off | Use mTLS config (`client-ssl.cfg`, port 9877, `CLIENT_SSL` session) |
+| `--timeout=N` | `65` | Seconds per run; `0` = unlimited. Uses `gtimeout`/`timeout` |
 | `--runs=N` / `--run-count=N` | `1` | Number of sequential runs |
 | `--pause=N` | `5` | Seconds between runs |
 

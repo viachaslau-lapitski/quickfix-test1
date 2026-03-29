@@ -1,7 +1,11 @@
 package com.perf.server;
 
 import quickfix.*;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -14,7 +18,7 @@ public class ServerApp {
         AtomicLong counter = new AtomicLong(0);
         ServerApplication application = new ServerApplication(counter);
 
-        InputStream configStream = ServerApp.class.getResourceAsStream("/server.cfg");
+        InputStream configStream = openConfigStream("server.cfg");
         SessionSettings settings = new SessionSettings(configStream);
 
         MessageStoreFactory storeFactory = new MemoryStoreFactory();
@@ -52,5 +56,17 @@ public class ServerApp {
         }));
 
         latch.await();
+    }
+
+    private static InputStream openConfigStream(String fileName) throws IOException {
+        Path workDirFile = Paths.get(fileName);
+        if (Files.exists(workDirFile)) {
+            return Files.newInputStream(workDirFile);
+        }
+        InputStream resourceStream = ServerApp.class.getResourceAsStream("/" + fileName);
+        if (resourceStream == null) {
+            throw new IOException("Config file not found in working directory or resources: " + fileName);
+        }
+        return resourceStream;
     }
 }

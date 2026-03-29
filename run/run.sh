@@ -7,6 +7,7 @@ TIMEOUT_SECONDS=65
 RUN_COUNT=1
 PAUSE_SECONDS=5
 STOP_REQUESTED=0
+SSL_MODE=0
 
 on_stop_signal() {
   STOP_REQUESTED=1
@@ -47,6 +48,10 @@ while [[ $# -gt 0 ]]; do
       PAUSE_SECONDS="${2:-}"
       shift 2
       ;;
+    --ssl)
+      SSL_MODE=1
+      shift
+      ;;
     *)
       ARGS+=("$1")
       shift
@@ -70,6 +75,22 @@ if ! [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]]; then
 fi
 
 cd "$SCRIPT_DIR"
+
+if [[ "$SSL_MODE" -eq 1 ]]; then
+  if [[ ! -f "client-ssl.cfg" ]]; then
+    echo "Missing client-ssl.cfg in $SCRIPT_DIR"
+    exit 1
+  fi
+  echo "SSL mode: copying client-ssl.cfg -> client.cfg"
+  cp client-ssl.cfg client.cfg
+else
+  if [[ ! -f "client-plain.cfg" ]]; then
+    echo "Missing client-plain.cfg in $SCRIPT_DIR"
+    exit 1
+  fi
+  echo "Plain mode: copying client-plain.cfg -> client.cfg"
+  cp client-plain.cfg client.cfg
+fi
 
 TIMEOUT_BIN=""
 TIMEOUT_FOREGROUND_ARGS=()

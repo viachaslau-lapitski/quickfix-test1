@@ -4,6 +4,8 @@ build/
 
 run/store
 run/logs
+run/client.cfg
+run/server.log
 
 # IDE output (Eclipse)
 bin/

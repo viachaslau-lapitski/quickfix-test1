@@ -2,6 +2,9 @@
 build/
 .gradle/
 
+run/store
+run/logs
+
 # IDE output (Eclipse)
 bin/
 

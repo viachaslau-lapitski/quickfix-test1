@@ -26,17 +26,18 @@ public class ClientApp {
         int tps = Integer.parseInt(appProps.getProperty("tps", "100"));
         int prod = Integer.parseInt(appProps.getProperty("prod", "1"));
         int len = Integer.parseInt(appProps.getProperty("len", "100"));
+        String store = appProps.getProperty("store", "memory");
         final int finalTps = tps;
         final int finalProd = prod;
         final int finalLen = len;
-        System.out.printf("Client starting: tps=%d prod=%d len=%d%n", finalTps, finalProd, finalLen);
+        System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s%n", finalTps, finalProd, finalLen, store);
 
         ClientApplication application = new ClientApplication();
 
         try (InputStream configStream = openConfigStream("client.cfg")) {
             SessionSettings settings = new SessionSettings(configStream);
 
-            MessageStoreFactory storeFactory = new MemoryStoreFactory();
+            MessageStoreFactory storeFactory = buildStoreFactory(store, settings);
             LogFactory logFactory = sessionID -> new Log() {
                 public void onIncoming(String message) {}
                 public void onOutgoing(String message) {}
@@ -156,5 +157,20 @@ public class ClientApp {
             throw new IOException("Config file not found in working directory or resources: " + fileName);
         }
         return resourceStream;
+    }
+
+    private static MessageStoreFactory buildStoreFactory(String store, SessionSettings settings) {
+        String normalized = store == null ? "" : store.trim().toLowerCase();
+        switch (normalized) {
+            case "file":
+                return new FileStoreFactory(settings);
+            case "cachedfile":
+                return new CachedFileStoreFactory(settings);
+            case "memory":
+            case "":
+                return new MemoryStoreFactory();
+            default:
+                throw new IllegalArgumentException("Unsupported store type: " + store);
+        }
     }
 }

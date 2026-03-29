@@ -27,10 +27,12 @@ public class ClientApp {
         int prod = Integer.parseInt(appProps.getProperty("prod", "1"));
         int len = Integer.parseInt(appProps.getProperty("len", "100"));
         String store = appProps.getProperty("store", "memory");
+        String log = appProps.getProperty("log", "none");
         final int finalTps = tps;
         final int finalProd = prod;
         final int finalLen = len;
-        System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s%n", finalTps, finalProd, finalLen, store);
+        System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s log=%s%n",
+            finalTps, finalProd, finalLen, store, log);
 
         ClientApplication application = new ClientApplication();
 
@@ -38,13 +40,7 @@ public class ClientApp {
             SessionSettings settings = new SessionSettings(configStream);
 
             MessageStoreFactory storeFactory = buildStoreFactory(store, settings);
-            LogFactory logFactory = sessionID -> new Log() {
-                public void onIncoming(String message) {}
-                public void onOutgoing(String message) {}
-                public void onEvent(String text) {}
-                public void onErrorEvent(String text) {}
-                public void clear() {}
-            };
+            LogFactory logFactory = buildLogFactory(log, settings);
             MessageFactory messageFactory = new DefaultMessageFactory();
 
             SocketInitiator initiator = new SocketInitiator(
@@ -171,6 +167,27 @@ public class ClientApp {
                 return new MemoryStoreFactory();
             default:
                 throw new IllegalArgumentException("Unsupported store type: " + store);
+        }
+    }
+
+    private static LogFactory buildLogFactory(String log, SessionSettings settings) {
+        String normalized = log == null ? "" : log.trim().toLowerCase();
+        switch (normalized) {
+            case "file":
+                return new FileLogFactory(settings);
+            case "console":
+                return new ScreenLogFactory(settings);
+            case "none":
+            case "":
+                return sessionID -> new Log() {
+                    public void onIncoming(String message) {}
+                    public void onOutgoing(String message) {}
+                    public void onEvent(String text) {}
+                    public void onErrorEvent(String text) {}
+                    public void clear() {}
+                };
+            default:
+                throw new IllegalArgumentException("Unsupported log type: " + log);
         }
     }
 }

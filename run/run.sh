@@ -6,6 +6,13 @@ JAR_PATH="$SCRIPT_DIR/../quickfix-client/build/libs/quickfix-client-all.jar"
 TIMEOUT_SECONDS=65
 RUN_COUNT=1
 PAUSE_SECONDS=5
+STOP_REQUESTED=0
+
+on_stop_signal() {
+  STOP_REQUESTED=1
+}
+
+trap on_stop_signal INT TERM TSTP
 
 if [[ ! -f "$JAR_PATH" ]]; then
   echo "Missing client JAR at: $JAR_PATH"
@@ -65,6 +72,7 @@ fi
 cd "$SCRIPT_DIR"
 
 TIMEOUT_BIN=""
+TIMEOUT_FOREGROUND_ARGS=()
 if [[ "$TIMEOUT_SECONDS" != 0 ]]; then
   if command -v gtimeout >/dev/null 2>&1; then
     TIMEOUT_BIN="gtimeout"
@@ -77,6 +85,12 @@ if [[ "$TIMEOUT_SECONDS" != 0 ]]; then
     echo "On macOS, install coreutils (gtimeout) or run without --timeout."
     exit 1
   fi
+
+  # Keep the command in the foreground so terminal signals (Ctrl+C/Ctrl+Z)
+  # are delivered as expected.
+  if "$TIMEOUT_BIN" --help 2>&1 | grep -q -- '--foreground'; then
+    TIMEOUT_FOREGROUND_ARGS=(--foreground)
+  fi
 fi
 
 BASE_CMD=(java -jar "$JAR_PATH")
@@ -85,11 +99,24 @@ if [[ ${#ARGS[@]} -gt 0 ]]; then
 fi
 
 for ((run=1; run<=RUN_COUNT; run++)); do
+  if [[ "$STOP_REQUESTED" -eq 1 ]]; then
+    exit 130
+  fi
+
   if [[ "$TIMEOUT_SECONDS" != 0 ]]; then
     set +e
-    "$TIMEOUT_BIN" "$TIMEOUT_SECONDS" "${BASE_CMD[@]}"
+    "$TIMEOUT_BIN" "${TIMEOUT_FOREGROUND_ARGS[@]}" "$TIMEOUT_SECONDS" "${BASE_CMD[@]}"
     exit_code=$?
     set -e
+
+    if [[ "$STOP_REQUESTED" -eq 1 ]]; then
+      exit 130
+    fi
+
+    if [[ $exit_code -eq 130 || $exit_code -eq 143 || $exit_code -eq 148 ]]; then
+      exit "$exit_code"
+    fi
+
     if [[ $exit_code -ne 0 && $exit_code -ne 124 && $exit_code -ne 137 ]]; then
       exit $exit_code
     fi
@@ -98,6 +125,9 @@ for ((run=1; run<=RUN_COUNT; run++)); do
   fi
 
   if [[ $run -lt $RUN_COUNT ]]; then
+    if [[ "$STOP_REQUESTED" -eq 1 ]]; then
+      exit 130
+    fi
     sleep "$PAUSE_SECONDS"
   fi
 done

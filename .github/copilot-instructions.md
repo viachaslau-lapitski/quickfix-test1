@@ -190,7 +190,7 @@ Config files in `docker/` are **volume-mounted at runtime** — they are never b
 
 **Producer thread rate**: Each producer thread sends the full `tps` rate independently (not `tps / prod`). Increasing `prod` multiplies total throughput.
 
-**Latency reporting**: Client reports `p95_ms` (95th percentile `sendToTarget` latency) once per second using a Micrometer `Timer`.
+**Latency reporting**: Client reports `p95_ms` (95th percentile `sendToTarget` latency) and `p100_ms` (max `sendToTarget` latency) once per second using a Micrometer `Timer`.
 
 **Dependency footprint**: `quickfix-server` depends only on `org.quickfixj:quickfixj-all:2.3.2`. `quickfix-client` also uses `io.micrometer:micrometer-core`. Keep dependencies minimal.
 

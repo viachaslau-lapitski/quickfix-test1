@@ -71,6 +71,7 @@ public class ClientApp {
                 .publishPercentileHistogram()
                 .register(meterRegistry);
             AtomicLong lastP95Nanos = new AtomicLong(0);
+            AtomicLong lastP100Nanos = new AtomicLong(0);
             int msgsPerProd = finalTps;
 
             ScheduledExecutorService[] producers = new ScheduledExecutorService[finalProd];
@@ -98,7 +99,8 @@ public class ClientApp {
             ScheduledExecutorService p95Sampler = Executors.newSingleThreadScheduledExecutor();
             p95Sampler.scheduleAtFixedRate(() -> {
                 long p95Nanos = 0;
-                ValueAtPercentile[] percentiles = sendTimer.takeSnapshot().percentileValues();
+                var snapshot = sendTimer.takeSnapshot();
+                ValueAtPercentile[] percentiles = snapshot.percentileValues();
                 for (ValueAtPercentile p : percentiles) {
                     if (p.percentile() == 0.95) {
                         p95Nanos = (long) p.value();
@@ -108,6 +110,10 @@ public class ClientApp {
                 if (p95Nanos > 0) {
                     lastP95Nanos.set(p95Nanos);
                 }
+                long p100Nanos = (long) snapshot.max(TimeUnit.NANOSECONDS);
+                if (p100Nanos > 0) {
+                    lastP100Nanos.set(p100Nanos);
+                }
             }, 1, 1, TimeUnit.SECONDS);
 
             ScheduledExecutorService reporter = Executors.newSingleThreadScheduledExecutor();
@@ -116,9 +122,11 @@ public class ClientApp {
                 long total = counter.get();
                 long diff = total - lastCount.getAndSet(total);
                     long p95Nanos = lastP95Nanos.get();
+                    long p100Nanos = lastP100Nanos.get();
                     double p95Millis = p95Nanos / 1_000_000.0;
-                    System.out.printf("[Client] iter=%-4d  total=%-9d  diff=%-9d  p95_ms=%-8.3f%n",
-                        iteration[0], total, diff, p95Millis);
+                    double p100Millis = p100Nanos / 1_000_000.0;
+                    System.out.printf("[Client] iter=%-4d  total=%-9d  diff=%-9d  p95_ms=%-8.3f  p100_ms=%-8.3f%n",
+                        iteration[0], total, diff, p95Millis, p100Millis);
             }, 1, 1, TimeUnit.SECONDS);
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

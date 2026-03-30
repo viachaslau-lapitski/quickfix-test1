@@ -215,11 +215,11 @@ Config files are **volume-mounted** into `/app/` at runtime — never baked into
 Both sides print a line every second:
 
 ```
-[Client] iter=48    total=720000     diff=15000      p95_ms=0.004
+[Client] iter=48    total=720000     diff=15000      p95_ms=0.004  p100_ms=0.009
 [Server] iter=48    total=720000     diff=720000
 ```
 
-- **client** — messages attempted plus `p95_ms` (95th-percentile `sendToTarget` latency)
+- **client** — messages attempted plus `p95_ms` (95th-percentile) and `p100_ms` (max) `sendToTarget` latency
 - **server** — messages received
 
 Stop both processes with `Ctrl+C`; shutdown hooks cleanly disconnect the FIX session.
@@ -255,7 +255,7 @@ The server hosts two sessions simultaneously. Use `--ssl` to switch between them
 ./run/run-docker.sh --ssl --build      # mTLS — uses docker-compose-ssl.yml
 ```
 
-Compare `diff/s` and `p95_ms` between runs to measure TLS overhead. For a clean comparison set `store=memory` and `log=none` in the relevant `app.properties` to eliminate I/O noise.
+Compare `diff/s`, `p95_ms`, and `p100_ms` between runs to measure TLS overhead. For a clean comparison set `store=memory` and `log=none` in the relevant `app.properties` to eliminate I/O noise.
 
 To regenerate the self-signed test certificates:
 

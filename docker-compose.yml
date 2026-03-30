@@ -1,0 +1,82 @@
+# FIX benchmark — Docker Compose
+#
+# Quickstart:
+#   docker compose up --build
+#
+# Tune constraints via env vars (override in shell or a .env file):
+#   LAT_MS        — one-way delay in ms applied on each container's egress (default: 0)
+#   LAT_JITTER_MS — ± jitter in ms (default: 0)
+#   PLR           — packet loss rate, e.g. "0.1" for 0.1% (default: 0)
+#   BW_MBIT       — egress bandwidth cap in mbit/s, 0 = unlimited (default: 0)
+#   JVM_OPTS      — extra JVM flags for both containers (default: empty)
+#
+# Example — simulate 25 ms one-way delay + 10 Mbit/s bandwidth:
+#   LAT_MS=25 BW_MBIT=10 docker compose up --build
+
+name: fixbench
+
+networks:
+  fix-net:
+    driver: bridge
+
+services:
+
+  fix-server:
+    build:
+      context: .
+      dockerfile: quickfix-server/Dockerfile
+    container_name: fix-server
+    hostname: fix-server
+    networks:
+      - fix-net
+    ports:
+      - "9876:9876"
+    cap_add:
+      - NET_ADMIN          # required for tc netem
+    volumes:
+      - ./docker/server.cfg:/app/server.cfg:ro
+    environment:
+      LAT_MS:        ${LAT_MS:-0}
+      LAT_JITTER_MS: ${LAT_JITTER_MS:-0}
+      PLR:           ${PLR:-0}
+      BW_MBIT:       ${BW_MBIT:-0}
+      JVM_OPTS:      ${JVM_OPTS:--Xms256m -Xmx512m}
+    deploy:
+      resources:
+        limits:
+          cpus:   "${SERVER_CPUS:-1.0}"
+          memory: "${SERVER_MEM:-512m}"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w1 localhost 9876"]
+      interval: 3s
+      timeout:  2s
+      retries:  15
+      start_period: 5s
+
+  fix-client:
+    build:
+      context: .
+      dockerfile: quickfix-client/Dockerfile
+    container_name: fix-client
+    hostname: fix-client
+    networks:
+      - fix-net
+    cap_add:
+      - NET_ADMIN          # required for tc netem
+    depends_on:
+      fix-server:
+        condition: service_healthy
+    volumes:
+      - ./docker/client.cfg:/app/client.cfg:ro
+      - ./docker/app.properties:/app/app.properties:ro
+    environment:
+      LAT_MS:        ${LAT_MS:-0}
+      LAT_JITTER_MS: ${LAT_JITTER_MS:-0}
+      PLR:           ${PLR:-0}
+      BW_MBIT:       ${BW_MBIT:-0}
+      JVM_OPTS:      ${JVM_OPTS:--Xms128m -Xmx256m}
+    deploy:
+      resources:
+        limits:
+          cpus:   "${CLIENT_CPUS:-2.0}"
+          memory: "${CLIENT_MEM:-256m}"

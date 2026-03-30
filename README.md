@@ -27,6 +27,7 @@ Unit tests: `quickfix-client/src/test/java/com/perf/client/ClientAppTest.java` (
 
 - Java 17+
 - (macOS, for timed runs) `brew install coreutils`
+- (Docker runs) [Docker Desktop](https://www.docker.com/products/docker-desktop/) with the `docker compose` v2 plugin
 
 ## Build
 
@@ -91,6 +92,7 @@ The `run/` directory is a self-contained launch environment with server and clie
 |------|---------|
 | `run/run-server.sh` | Starts the server from `run/` (resolves `server.cfg` and `certs/` paths) |
 | `run/run-client.sh` | Starts the client; picks up `client.cfg` and `app.properties` automatically |
+| `run/run-docker.sh` | Launches both containers via `docker-compose.yml`; accepts all constraint env vars |
 | `run/client-plain.cfg` | Plain TCP initiator config — port 9876, `SenderCompID=CLIENT` |
 | `run/client-ssl.cfg` | mTLS initiator config — port 9877, `SenderCompID=CLIENT_SSL`, TLSv1.2 |
 | `run/server.cfg` | Two-session acceptor — plain on `:9876`, mTLS on `:9877` (`NeedClientAuth=Y`) |
@@ -123,7 +125,76 @@ Any unrecognised flags are passed through to the client JAR. The script handles 
 ./run/run-client.sh --ssl --timeout=60
 ```
 
-## Console Output
+## Run with Docker
+
+Docker runs both components in isolated containers on a shared bridge network (`fix-net`), with optional network emulation (`tc netem`) and hard resource limits.
+
+### Quick start
+
+```bash
+# First run, or after changing Java source / build.gradle — build images (~30 s)
+./run/run-docker.sh --build
+
+# Change docker/app.properties or any env var — no rebuild needed (~1 s)
+./run/run-docker.sh
+
+# Detached
+./run/run-docker.sh -d
+```
+
+Edit **`docker/app.properties`** to tune throughput (same properties as `run/app.properties`):
+
+```properties
+tps=1000
+prod=4
+len=75
+store=memory
+log=none
+```
+
+### Constraint env vars
+
+All vars have defaults in `run/run-docker.sh`; override inline or via a `.env` file.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LAT_MS` | `25` | One-way egress delay (ms) — applied on **both** containers via `tc netem`, so RTT ≈ `2 × LAT_MS` |
+| `LAT_JITTER_MS` | `0` | ± packet jitter (ms) |
+| `PLR` | `0.1` | Packet loss rate (%) |
+| `BW_MBIT` | `10` | Egress bandwidth cap (Mbit/s); `0` = unlimited |
+| `SERVER_CPUS` | `1.0` | CPU quota for the server container |
+| `SERVER_MEM` | `512m` | Memory limit for the server container |
+| `CLIENT_CPUS` | `2.0` | CPU quota for the client container |
+| `CLIENT_MEM` | `256m` | Memory limit for the client container |
+| `JVM_OPTS` | _(empty)_ | Extra JVM flags applied to both containers |
+
+**Examples:**
+
+```bash
+# 50 ms RTT, 5 Mbit/s, no loss, server pinned to half a core
+LAT_MS=25 BW_MBIT=5 SERVER_CPUS=0.5 ./run/run-docker.sh
+
+# Baseline — no network constraints, generous resources
+LAT_MS=0 BW_MBIT=0 PLR=0 ./run/run-docker.sh
+
+# Extra heap for high-tps runs
+JVM_OPTS="-Xmx1g" tps=5000 ./run/run-docker.sh
+```
+
+### docker/ directory
+
+```
+docker/
+├── server.cfg           — FIX acceptor config (plain :9876, no SSL)
+├── client.cfg           — FIX initiator config (SocketConnectHost=fix-server)
+├── app.properties       — client tuning; edit freely — no rebuild required
+├── entrypoint-server.sh — applies tc netem constraints, then starts server JAR
+└── entrypoint-client.sh — applies tc netem constraints, then starts client JAR
+```
+
+Config files are **volume-mounted** into `/app/` at runtime — never baked into the images. Changing any of them takes effect on the next `docker compose up` without `--build`.
+
+
 
 Both sides print a line every second:
 

@@ -52,6 +52,33 @@ java -jar quickfix-client/build/libs/quickfix-client-all.jar
 
 There are no `--tps` / `--prod` CLI flags. All client tuning is done via `app.properties` (see Configuration section).
 
+### Docker
+
+Docker runs both components in isolated containers on a shared bridge network (`fix-net`) with optional network emulation and resource limits.
+
+```bash
+# First run or after Java source / build.gradle changes — build images
+./run/run-docker.sh --build
+
+# Change docker/app.properties or env vars — no rebuild needed
+./run/run-docker.sh
+LAT_MS=50 BW_MBIT=5 SERVER_CPUS=0.5 ./run/run-docker.sh
+```
+
+Env vars accepted by `run-docker.sh` and `docker-compose.yml`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LAT_MS` | `25` | One-way egress delay (ms) applied on both containers via `tc netem` |
+| `LAT_JITTER_MS` | `0` | ± jitter added to each packet (ms) |
+| `PLR` | `0.1` | Packet loss rate (%) |
+| `BW_MBIT` | `10` | Egress bandwidth cap (Mbit/s); `0` = unlimited |
+| `SERVER_CPUS` | `1.0` | CPU quota for the server container |
+| `SERVER_MEM` | `512m` | Memory limit for the server container |
+| `CLIENT_CPUS` | `2.0` | CPU quota for the client container |
+| `CLIENT_MEM` | `256m` | Memory limit for the client container |
+| `JVM_OPTS` | | Extra JVM flags applied to both containers |
+
 ## Architecture
 
 ```
@@ -104,6 +131,7 @@ QuickFIX/J session parameters live in `src/main/resources/server.cfg` / `client.
 run/
 ├── run-server.sh      — launches quickfix-server JAR (run from repo root or any dir)
 ├── run-client.sh      — launches quickfix-client JAR; picks up local client.cfg & app.properties
+├── run-docker.sh      — launches both containers via docker-compose.yml at repo root
 ├── client-plain.cfg   — FIX initiator config: plain TCP, port 9876, SenderCompID=CLIENT
 ├── client-ssl.cfg     — FIX initiator config: mTLS, port 9877, SenderCompID=CLIENT_SSL
 ├── server.cfg         — FIX acceptor config: two sessions (plain :9876 + mTLS :9877)
@@ -127,6 +155,19 @@ run/
 
 All unrecognized arguments are forwarded to the Java process. The script handles `SIGINT`/`SIGTERM`/`SIGTSTP` gracefully and validates all numeric inputs.
 
+## docker/ Directory
+
+```
+docker/
+├── server.cfg           — FIX acceptor config for Docker (plain :9876, no SSL)
+├── client.cfg           — FIX initiator config for Docker (SocketConnectHost=fix-server)
+├── app.properties       — client tuning for Docker runs (edit to change tps/prod/len etc.)
+├── entrypoint-server.sh — applies tc netem then starts server JAR
+└── entrypoint-client.sh — applies tc netem then starts client JAR
+```
+
+Config files in `docker/` are **volume-mounted at runtime** — they are never baked into the images. Editing them takes effect on the next `docker compose up` without any rebuild.
+
 ## Key Conventions
 
 **No-op logging (server)**: `ServerApp` implements a custom `LogFactory` returning empty `Log` instances — hardcoded, not configurable. Do not replace with SLF4J or other frameworks; this is intentional for performance.
@@ -144,3 +185,15 @@ All unrecognized arguments are forwarded to the Java process. The script handles
 **Dependency footprint**: `quickfix-server` depends only on `org.quickfixj:quickfixj-all:2.3.2`. `quickfix-client` also uses `io.micrometer:micrometer-core`. Keep dependencies minimal.
 
 **Fat JARs only**: The Shadow plugin (`com.github.johnrengelman.shadow`) produces self-contained JARs with `mergeServiceFiles()` — required for QuickFIX/J's service loader entries to work correctly.
+
+## Docker Conventions
+
+**Config files are volume-mounted, never baked in**: `docker/app.properties`, `docker/client.cfg`, and `docker/server.cfg` are mounted into `/app/` at container startup. Do NOT add `COPY docker/*.cfg` or `COPY docker/app.properties` back to the Dockerfiles — that would cause cache invalidation on every param change.
+
+**Rebuild rule**: only pass `--build` to `docker compose up` after changing Java source or `build.gradle`. For config/env-var-only changes, `docker compose up` (no `--build`) is sufficient.
+
+**Gradle dep-cache layer**: both Dockerfiles copy build descriptors (`settings.gradle`, `build.gradle`, `gradlew`, `gradle/`, and the subproject `build.gradle`) before `COPY . .`, so the dependency-resolution layer is cached independently of source changes. Preserve this ordering when modifying the Dockerfiles.
+
+**tc netem via entrypoints**: `docker/entrypoint-server.sh` and `docker/entrypoint-client.sh` read `LAT_MS`, `LAT_JITTER_MS`, `PLR`, and `BW_MBIT` env vars and apply `tc qdisc add dev eth0 root netem …` before exec-ing the JVM. Both containers require `cap_add: [NET_ADMIN]` in `docker-compose.yml`.
+
+**Healthcheck**: `fix-server` exposes a `nc -z -w1 localhost 9876` healthcheck; `fix-client` uses `depends_on: condition: service_healthy` so it only starts after the server port is confirmed open.

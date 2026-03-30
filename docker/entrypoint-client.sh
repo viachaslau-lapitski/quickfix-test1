@@ -23,5 +23,8 @@ apply_netem() {
 
 apply_netem
 
+# Wipe log and store dirs so each run starts clean (logs can grow unbounded otherwise).
+rm -rf /tmp/logs /tmp/store
+
 # shellcheck disable=SC2086
 exec java ${JVM_OPTS:-} -jar /app/client.jar

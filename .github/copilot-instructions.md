@@ -63,7 +63,13 @@ Docker runs both components in isolated containers on a shared bridge network (`
 # Change docker/app.properties or env vars — no rebuild needed
 ./run/run-docker.sh
 LAT_MS=50 BW_MBIT=5 SERVER_CPUS=0.5 ./run/run-docker.sh
+
+# mTLS mode — uses docker-compose-ssl.yml; mounts run/certs/ on both containers
+./run/run-docker.sh --ssl --build   # first run
+./run/run-docker.sh --ssl           # subsequent runs (no rebuild)
 ```
+
+`run/run-docker.sh --ssl` selects `docker-compose-ssl.yml`; without `--ssl` it uses `docker-compose.yml`. All other flags (e.g. `--build`, `-d`) are passed through to `docker compose up`.
 
 Env vars accepted by `run-docker.sh` and `docker-compose.yml`:
 
@@ -160,13 +166,19 @@ All unrecognized arguments are forwarded to the Java process. The script handles
 ```
 docker/
 ├── server.cfg           — FIX acceptor config for Docker (plain :9876, no SSL)
-├── client.cfg           — FIX initiator config for Docker (SocketConnectHost=fix-server)
+├── server-ssl.cfg       — FIX acceptor config for Docker (plain :9876 + mTLS :9877)
+├── client.cfg           — FIX initiator config for Docker (fix-server:9876, plain TCP)
+├── client-ssl.cfg       — FIX initiator config for Docker (fix-server:9877, mTLS)
 ├── app.properties       — client tuning for Docker runs (edit to change tps/prod/len etc.)
 ├── entrypoint-server.sh — applies tc netem then starts server JAR
-└── entrypoint-client.sh — applies tc netem then starts client JAR
+├── entrypoint-client.sh — applies tc netem then starts client JAR
+├── store/               — bind-mount target for file store output (auto-created by Docker)
+└── logs/                — bind-mount target for file log output (auto-created by Docker)
 ```
 
 Config files in `docker/` are **volume-mounted at runtime** — they are never baked into the images. Editing them takes effect on the next `docker compose up` without any rebuild.
+
+`docker/client.cfg` and `docker/client-ssl.cfg` both declare `FileStorePath=/tmp/store` and `FileLogPath=/tmp/logs`. Both compose files bind-mount `./docker/store` and `./docker/logs` to those container paths. To activate persistence, set `store=file` and/or `log=file` in `docker/app.properties`.
 
 ## Key Conventions
 
@@ -188,7 +200,11 @@ Config files in `docker/` are **volume-mounted at runtime** — they are never b
 
 ## Docker Conventions
 
-**Config files are volume-mounted, never baked in**: `docker/app.properties`, `docker/client.cfg`, and `docker/server.cfg` are mounted into `/app/` at container startup. Do NOT add `COPY docker/*.cfg` or `COPY docker/app.properties` back to the Dockerfiles — that would cause cache invalidation on every param change.
+**Config files are volume-mounted, never baked in**: `docker/app.properties`, `docker/client.cfg`, `docker/client-ssl.cfg`, `docker/server.cfg`, and `docker/server-ssl.cfg` are mounted into `/app/` at container startup. Do NOT add `COPY docker/*.cfg` or `COPY docker/app.properties` back to the Dockerfiles — that would cause cache invalidation on every param change.
+
+**Two compose files**: `docker-compose.yml` is for plain TCP; `docker-compose-ssl.yml` is for mTLS. The SSL compose mounts `./run/certs:/app/certs:ro` on both containers and uses `docker/server-ssl.cfg` (two sessions: plain :9876 + SSL :9877) and `docker/client-ssl.cfg`. Select via `run/run-docker.sh --ssl`.
+
+**Store/log bind mounts**: both compose files bind-mount `./docker/store:/tmp/store` and `./docker/logs:/tmp/logs`. `docker/client.cfg` and `docker/client-ssl.cfg` set `FileStorePath=/tmp/store` and `FileLogPath=/tmp/logs`. These paths are only written to when `store=file` or `log=file` is set in `docker/app.properties`.
 
 **Rebuild rule**: only pass `--build` to `docker compose up` after changing Java source or `build.gradle`. For config/env-var-only changes, `docker compose up` (no `--build`) is sufficient.
 

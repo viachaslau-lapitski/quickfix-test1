@@ -138,8 +138,13 @@ Docker runs both components in isolated containers on a shared bridge network (`
 # Change docker/app.properties or any env var — no rebuild needed (~1 s)
 ./run/run-docker.sh
 
+# mTLS — uses docker-compose-ssl.yml; server accepts plain :9876 + SSL :9877
+./run/run-docker.sh --ssl --build   # first run
+./run/run-docker.sh --ssl           # subsequent runs
+
 # Detached
 ./run/run-docker.sh -d
+./run/run-docker.sh --ssl -d
 ```
 
 Edit **`docker/app.properties`** to tune throughput (same properties as `run/app.properties`):
@@ -186,13 +191,26 @@ JVM_OPTS="-Xmx1g" tps=5000 ./run/run-docker.sh
 ```
 docker/
 ├── server.cfg           — FIX acceptor config (plain :9876, no SSL)
-├── client.cfg           — FIX initiator config (SocketConnectHost=fix-server)
+├── server-ssl.cfg       — FIX acceptor config (plain :9876 + mTLS :9877, used by docker-compose-ssl.yml)
+├── client.cfg           — FIX initiator config (fix-server:9876, plain TCP)
+├── client-ssl.cfg       — FIX initiator config (fix-server:9877, mTLS, used by docker-compose-ssl.yml)
 ├── app.properties       — client tuning; edit freely — no rebuild required
 ├── entrypoint-server.sh — applies tc netem constraints, then starts server JAR
-└── entrypoint-client.sh — applies tc netem constraints, then starts client JAR
+├── entrypoint-client.sh — applies tc netem constraints, then starts client JAR
+├── store/               — bind-mount target for file store output (auto-created by Docker)
+└── logs/                — bind-mount target for file log output (auto-created by Docker)
 ```
 
 Config files are **volume-mounted** into `/app/` at runtime — never baked into the images. Changing any of them takes effect on the next `docker compose up` without `--build`.
+
+`docker/client.cfg` and `docker/client-ssl.cfg` both set `FileStorePath=/tmp/store` and `FileLogPath=/tmp/logs`. Both compose files bind-mount `./docker/store` and `./docker/logs` to those paths, so store/log output is accessible on the host when `store=file` or `log=file` is set in `docker/app.properties`.
+
+### Compose files
+
+| File | Usage |
+|------|-------|
+| `docker-compose.yml` | Plain TCP only — client connects to `fix-server:9876` |
+| `docker-compose-ssl.yml` | mTLS — server accepts plain :9876 + SSL :9877; client connects via SSL; mounts `run/certs/` on both containers |
 
 
 
@@ -221,7 +239,9 @@ Use `store` and `log` in `app.properties` to isolate persistence overhead:
 
 ## Benchmarking SSL / mTLS Impact
 
-The server hosts two sessions simultaneously. Use `run-client.sh --ssl` to switch between them:
+The server hosts two sessions simultaneously. Use `--ssl` to switch between them:
+
+**Local (JAR-based):**
 
 ```bash
 ./run/run-server.sh                    # accepts both plain :9876 and mTLS :9877
@@ -230,7 +250,14 @@ The server hosts two sessions simultaneously. Use `run-client.sh --ssl` to switc
 ./run/run-client.sh --ssl --timeout=60 # mTLS — same tps settings, encrypted channel
 ```
 
-Compare `diff/s` and `p95_ms` between runs to measure TLS overhead. For a clean comparison set `store=memory` and `log=none` in `run/app.properties` to eliminate I/O noise.
+**Docker:**
+
+```bash
+./run/run-docker.sh --build            # plain TCP baseline
+./run/run-docker.sh --ssl --build      # mTLS — uses docker-compose-ssl.yml
+```
+
+Compare `diff/s` and `p95_ms` between runs to measure TLS overhead. For a clean comparison set `store=memory` and `log=none` in the relevant `app.properties` to eliminate I/O noise.
 
 To regenerate the self-signed test certificates:
 

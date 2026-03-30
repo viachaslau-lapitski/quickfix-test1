@@ -67,8 +67,6 @@ services:
       - ./docker/client-ssl.cfg:/app/client.cfg:ro
       - ./docker/app.properties:/app/app.properties:ro
       - ./run/certs:/app/certs:ro
-      - ./docker/store:/tmp/store
-      - ./docker/logs:/tmp/logs
     environment:
       LAT_MS:        ${LAT_MS:-0}
       LAT_JITTER_MS: ${LAT_JITTER_MS:-0}

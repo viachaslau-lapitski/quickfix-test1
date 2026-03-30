@@ -171,14 +171,12 @@ docker/
 ├── client-ssl.cfg       — FIX initiator config for Docker (fix-server:9877, mTLS)
 ├── app.properties       — client tuning for Docker runs (edit to change tps/prod/len etc.)
 ├── entrypoint-server.sh — applies tc netem then starts server JAR
-├── entrypoint-client.sh — applies tc netem then starts client JAR
-├── store/               — bind-mount target for file store output (auto-created by Docker)
-└── logs/                — bind-mount target for file log output (auto-created by Docker)
+└── entrypoint-client.sh — applies tc netem then starts client JAR
 ```
 
 Config files in `docker/` are **volume-mounted at runtime** — they are never baked into the images. Editing them takes effect on the next `docker compose up` without any rebuild.
 
-`docker/client.cfg` and `docker/client-ssl.cfg` both declare `FileStorePath=/tmp/store` and `FileLogPath=/tmp/logs`. Both compose files bind-mount `./docker/store` and `./docker/logs` to those container paths. To activate persistence, set `store=file` and/or `log=file` in `docker/app.properties`.
+`docker/client.cfg` and `docker/client-ssl.cfg` both declare `FileStorePath=/tmp/store` and `FileLogPath=/tmp/logs`. These paths reside in the container's ephemeral `/tmp` — no volume mount is needed, the paths are writable by default. To activate persistence overhead for benchmarking, set `store=file` and/or `log=file` in `docker/app.properties`.
 
 ## Key Conventions
 
@@ -204,7 +202,7 @@ Config files in `docker/` are **volume-mounted at runtime** — they are never b
 
 **Two compose files**: `docker-compose.yml` is for plain TCP; `docker-compose-ssl.yml` is for mTLS. The SSL compose mounts `./run/certs:/app/certs:ro` on both containers and uses `docker/server-ssl.cfg` (two sessions: plain :9876 + SSL :9877) and `docker/client-ssl.cfg`. Select via `run/run-docker.sh --ssl`.
 
-**Store/log bind mounts**: both compose files bind-mount `./docker/store:/tmp/store` and `./docker/logs:/tmp/logs`. `docker/client.cfg` and `docker/client-ssl.cfg` set `FileStorePath=/tmp/store` and `FileLogPath=/tmp/logs`. These paths are only written to when `store=file` or `log=file` is set in `docker/app.properties`.
+**Store/log paths**: both `docker/client.cfg` and `docker/client-ssl.cfg` set `FileStorePath=/tmp/store` and `FileLogPath=/tmp/logs`. These paths live in the container's ephemeral `/tmp` — no volume mount required. They are only written to when `store=file` or `log=file` is set in `docker/app.properties`.
 
 **Rebuild rule**: only pass `--build` to `docker compose up` after changing Java source or `build.gradle`. For config/env-var-only changes, `docker compose up` (no `--build`) is sufficient.
 

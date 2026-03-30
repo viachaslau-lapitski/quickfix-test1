@@ -196,14 +196,12 @@ docker/
 ├── client-ssl.cfg       — FIX initiator config (fix-server:9877, mTLS, used by docker-compose-ssl.yml)
 ├── app.properties       — client tuning; edit freely — no rebuild required
 ├── entrypoint-server.sh — applies tc netem constraints, then starts server JAR
-├── entrypoint-client.sh — applies tc netem constraints, then starts client JAR
-├── store/               — bind-mount target for file store output (auto-created by Docker)
-└── logs/                — bind-mount target for file log output (auto-created by Docker)
+└── entrypoint-client.sh — applies tc netem constraints, then starts client JAR
 ```
 
 Config files are **volume-mounted** into `/app/` at runtime — never baked into the images. Changing any of them takes effect on the next `docker compose up` without `--build`.
 
-`docker/client.cfg` and `docker/client-ssl.cfg` both set `FileStorePath=/tmp/store` and `FileLogPath=/tmp/logs`. Both compose files bind-mount `./docker/store` and `./docker/logs` to those paths, so store/log output is accessible on the host when `store=file` or `log=file` is set in `docker/app.properties`.
+`docker/client.cfg` and `docker/client-ssl.cfg` set `FileStorePath=/tmp/store` and `FileLogPath=/tmp/logs`. These paths live in the container's ephemeral `/tmp` filesystem — writable without any volume mount. To measure I/O overhead, set `store=file` and/or `log=file` in `docker/app.properties`; to benchmark without I/O, use `store=memory` + `log=none`.
 
 ### Compose files
 

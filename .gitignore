@@ -15,6 +15,9 @@ bin/
 *.class
 *.war
 
+# Keep the Gradle wrapper JAR so the repo is self-contained
+!gradle/wrapper/gradle-wrapper.jar
+
 # IntelliJ IDEA
 .idea/
 *.iml

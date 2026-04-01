@@ -67,10 +67,11 @@ public class ClientApp {
             AtomicLong counter = new AtomicLong(0);
             SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
             Timer sendTimer = Timer.builder("client.sendToTarget")
-                .publishPercentiles(0.95)
+                .publishPercentiles(0.95, 0.99)
                 .publishPercentileHistogram()
                 .register(meterRegistry);
             AtomicLong lastP95Nanos = new AtomicLong(0);
+            AtomicLong lastP99Nanos = new AtomicLong(0);
             AtomicLong lastP100Nanos = new AtomicLong(0);
             int msgsPerProd = finalTps;
 
@@ -96,19 +97,29 @@ public class ClientApp {
 
             AtomicLong lastCount = new AtomicLong(0);
             long[] iteration = {0};
-            ScheduledExecutorService p95Sampler = Executors.newSingleThreadScheduledExecutor();
-            p95Sampler.scheduleAtFixedRate(() -> {
+            ScheduledExecutorService latencySampler = Executors.newSingleThreadScheduledExecutor();
+            latencySampler.scheduleAtFixedRate(() -> {
                 long p95Nanos = 0;
+                long p99Nanos = 0;
                 var snapshot = sendTimer.takeSnapshot();
                 ValueAtPercentile[] percentiles = snapshot.percentileValues();
                 for (ValueAtPercentile p : percentiles) {
-                    if (p.percentile() == 0.95) {
-                        p95Nanos = (long) p.value();
-                        break;
+                    switch ((int) Math.round(p.percentile() * 100)) {
+                        case 95:
+                            p95Nanos = (long) p.value();
+                            break;
+                        case 99:
+                            p99Nanos = (long) p.value();
+                            break;
+                        default:
+                            break;
                     }
                 }
                 if (p95Nanos > 0) {
                     lastP95Nanos.set(p95Nanos);
+                }
+                if (p99Nanos > 0) {
+                    lastP99Nanos.set(p99Nanos);
                 }
                 long p100Nanos = (long) snapshot.max(TimeUnit.NANOSECONDS);
                 if (p100Nanos > 0) {
@@ -122,17 +133,19 @@ public class ClientApp {
                 long total = counter.get();
                 long diff = total - lastCount.getAndSet(total);
                     long p95Nanos = lastP95Nanos.get();
+                    long p99Nanos = lastP99Nanos.get();
                     long p100Nanos = lastP100Nanos.get();
                     double p95Millis = p95Nanos / 1_000_000.0;
+                    double p99Millis = p99Nanos / 1_000_000.0;
                     double p100Millis = p100Nanos / 1_000_000.0;
-                    System.out.printf("[Client] iter=%-4d  total=%-9d  diff=%-9d  p95_ms=%-8.3f  p100_ms=%-8.3f%n",
-                        iteration[0], total, diff, p95Millis, p100Millis);
+                    System.out.printf("[Client] iter=%-4d  total=%-9d  diff=%-9d  p95_ms=%-8.3f  p99_ms=%-8.3f  p100_ms=%-8.3f%n",
+                        iteration[0], total, diff, p95Millis, p99Millis, p100Millis);
             }, 1, 1, TimeUnit.SECONDS);
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("Client shutting down...");
                 reporter.shutdown();
-                p95Sampler.shutdown();
+                latencySampler.shutdown();
                 for (ScheduledExecutorService p : producers) p.shutdown();
                 try { initiator.stop(true); } catch (Exception e) { /* ignore */ }
             }));

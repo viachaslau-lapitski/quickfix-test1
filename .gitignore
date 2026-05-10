@@ -6,6 +6,8 @@ run/store
 run/logs
 run/client.cfg
 run/server.log
+errors.log
+run/errors.log
 
 # IDE output (Eclipse)
 bin/
@@ -38,3 +40,8 @@ out/
 
 # Windows
 Thumbs.db
+
+findings.md
+
+#images
+*.png

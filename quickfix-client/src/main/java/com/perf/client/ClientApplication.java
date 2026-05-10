@@ -7,6 +7,11 @@ public class ClientApplication implements Application {
 
     private final AtomicBoolean loggedOn = new AtomicBoolean(false);
     private volatile SessionID sessionID;
+    private final SessionErrorListener errorListener;
+
+    public ClientApplication(SessionErrorListener errorListener) {
+        this.errorListener = errorListener;
+    }
 
     public boolean isLoggedOn() {
         return loggedOn.get();
@@ -18,6 +23,10 @@ public class ClientApplication implements Application {
 
     @Override public void onCreate(SessionID sessionID) {
         this.sessionID = sessionID;
+        Session session = Session.lookupSession(sessionID);
+        if (session != null) {
+            session.addStateListener(errorListener);
+        }
     }
 
     @Override

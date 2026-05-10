@@ -34,7 +34,18 @@ public class ClientApp {
         System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s log=%s%n",
             finalTps, finalProd, finalLen, store, log);
 
-        ClientApplication application = new ClientApplication();
+        AtomicLong transientErrors = new AtomicLong(0);
+        AtomicLong channelBreaks = new AtomicLong(0);
+        ErrorLog errorLog;
+        try {
+            errorLog = new ErrorLog("errors.log");
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to open errors.log", e);
+        }
+        System.out.println("Client error details logged to: errors.log");
+
+        SessionErrorListener errorListener = new SessionErrorListener(transientErrors, channelBreaks, errorLog);
+        ClientApplication application = new ClientApplication(errorListener);
 
         try (InputStream configStream = openConfigStream("client.cfg")) {
             SessionSettings settings = new SessionSettings(configStream);
@@ -89,7 +100,8 @@ public class ClientApp {
                             long elapsed = System.nanoTime() - start;
                             sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
                         } catch (Exception e) {
-                            // ignore send errors in perf test
+                            long count = transientErrors.incrementAndGet();
+                            errorLog.logTransient("sendToTarget", count, e);
                         }
                     }
                 }, 0, 1, TimeUnit.SECONDS);
@@ -138,8 +150,8 @@ public class ClientApp {
                     double p95Millis = p95Nanos / 1_000_000.0;
                     double p99Millis = p99Nanos / 1_000_000.0;
                     double p100Millis = p100Nanos / 1_000_000.0;
-                    System.out.printf("[Client] iter=%-4d  total=%-9d  diff=%-9d  p95_ms=%-8.3f  p99_ms=%-8.3f  p100_ms=%-8.3f%n",
-                        iteration[0], total, diff, p95Millis, p99Millis, p100Millis);
+                    System.out.printf("[Client] iter=%-4d  total=%-9d  diff=%-9d  transient_errors=%-6d  channel_breaks=%-4d  p95_ms=%-8.3f  p99_ms=%-8.3f  p100_ms=%-8.3f%n",
+                        iteration[0], total, diff, transientErrors.get(), channelBreaks.get(), p95Millis, p99Millis, p100Millis);
             }, 1, 1, TimeUnit.SECONDS);
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -148,6 +160,7 @@ public class ClientApp {
                 latencySampler.shutdown();
                 for (ScheduledExecutorService p : producers) p.shutdown();
                 try { initiator.stop(true); } catch (Exception e) { /* ignore */ }
+                errorLog.close();
             }));
 
             // Block forever

@@ -219,11 +219,11 @@ public class ClientApp {
                     public void onIncoming(String message) {}
                     public void onOutgoing(String message) {}
                     public void onEvent(String text) {
-                        // Capture disconnect reason lines so errors.log shows WHY a
-                        // session dropped (e.g. "Disconnecting: Encountered END_OF_STREAM").
-                        if (text.startsWith("Disconnecting:")) {
-                            errorLog.logSessionEvent(sessionID.toString(), "EVENT", text);
-                        }
+                        // Log all session events so errors.log captures the real disconnect
+                        // cause. QFJ routes IOException subclasses (including SSLException)
+                        // through onEvent(), not onErrorEvent(), so filtering to just
+                        // "Disconnecting:" would silently discard the underlying error.
+                        errorLog.logSessionEvent(sessionID.toString(), "EVENT", text);
                     }
                     public void onErrorEvent(String text) {
                         errorLog.logSessionEvent(sessionID.toString(), "ERROR", text);

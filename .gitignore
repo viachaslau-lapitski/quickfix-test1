@@ -8,6 +8,7 @@ run/client.cfg
 run/server.log
 errors.log
 run/errors.log
+run/server-errors.log
 
 # IDE output (Eclipse)
 bin/

@@ -58,6 +58,16 @@ public final class ErrorLog implements AutoCloseable {
             FMT.format(LocalDateTime.now()), count, context, reason);
     }
 
+    /**
+     * Logs a QFJ session-level error or warn event (e.g. disconnect reason, SSL error).
+     * Captured from {@code Log.onErrorEvent}/{@code onWarnEvent} — reveals the root cause
+     * of disconnects that would otherwise only appear as a bare {@code onDisconnect()} callback.
+     */
+    public synchronized void logSessionEvent(String sessionID, String level, String text) {
+        writer.printf("%s  session-%-5s  sid=%-40s  %s%n",
+            FMT.format(LocalDateTime.now()), level, sessionID, text);
+    }
+
     @Override
     public void close() {
         writer.close();

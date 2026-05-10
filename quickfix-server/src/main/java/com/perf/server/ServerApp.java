@@ -27,8 +27,17 @@ public class ServerApp {
         LogFactory logFactory = sessionID -> new Log() {
             public void onIncoming(String message) {}
             public void onOutgoing(String message) {}
-            public void onEvent(String text) {}
-            public void onErrorEvent(String text) {}
+            public void onEvent(String text) {
+                // Capture disconnect reasons so the root cause of session drops is visible.
+                if (text.startsWith("Disconnecting:")) {
+                    System.err.printf("%s [Server-EVENT] %s: %s%n",
+                        java.time.LocalTime.now(), sessionID, text);
+                }
+            }
+            public void onErrorEvent(String text) {
+                System.err.printf("%s [Server-ERROR] %s: %s%n",
+                    java.time.LocalTime.now(), sessionID, text);
+            }
             public void clear() {}
         };
         MessageFactory messageFactory = new DefaultMessageFactory();

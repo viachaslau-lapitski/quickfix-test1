@@ -51,7 +51,7 @@ public class ClientApp {
             SessionSettings settings = new SessionSettings(configStream);
 
             MessageStoreFactory storeFactory = buildStoreFactory(store, settings);
-            LogFactory logFactory = buildLogFactory(log, settings);
+            LogFactory logFactory = buildLogFactory(log, settings, errorLog);
             MessageFactory messageFactory = new DefaultMessageFactory();
 
             SocketInitiator initiator = new SocketInitiator(
@@ -204,7 +204,7 @@ public class ClientApp {
         }
     }
 
-    private static LogFactory buildLogFactory(String log, SessionSettings settings) {
+    private static LogFactory buildLogFactory(String log, SessionSettings settings, ErrorLog errorLog) {
         String normalized = log == null ? "" : log.trim().toLowerCase();
         switch (normalized) {
             case "file":
@@ -213,11 +213,24 @@ public class ClientApp {
                 return new ScreenLogFactory(settings);
             case "none":
             case "":
+                // Suppress FIX message traffic but capture error/warn events so the root
+                // cause of disconnects (e.g. SSL BufferOverflowException) is visible in errors.log.
                 return sessionID -> new Log() {
                     public void onIncoming(String message) {}
                     public void onOutgoing(String message) {}
-                    public void onEvent(String text) {}
-                    public void onErrorEvent(String text) {}
+                    public void onEvent(String text) {
+                        // Capture disconnect reason lines so errors.log shows WHY a
+                        // session dropped (e.g. "Disconnecting: Encountered END_OF_STREAM").
+                        if (text.startsWith("Disconnecting:")) {
+                            errorLog.logSessionEvent(sessionID.toString(), "EVENT", text);
+                        }
+                    }
+                    public void onErrorEvent(String text) {
+                        errorLog.logSessionEvent(sessionID.toString(), "ERROR", text);
+                    }
+                    public void onWarnEvent(String text) {
+                        errorLog.logSessionEvent(sessionID.toString(), "WARN", text);
+                    }
                     public void clear() {}
                 };
             default:

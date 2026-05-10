@@ -242,15 +242,20 @@ public class ClientApp {
             case "none":
             case "":
                 // Suppress FIX message traffic but capture error/warn events so the root
-                // cause of disconnects (e.g. SSL BufferOverflowException) is visible in errors.log.
+                // cause of disconnects (e.g. SSL Tag mismatch) is visible in errors.log.
                 return sessionID -> new Log() {
                     public void onIncoming(String message) {}
                     public void onOutgoing(String message) {}
                     public void onEvent(String text) {
-                        // Log all session events so errors.log captures the real disconnect
-                        // cause. QFJ routes IOException subclasses (including SSLException)
-                        // through onEvent(), not onErrorEvent(), so filtering to just
-                        // "Disconnecting:" would silently discard the underlying error.
+                        // Skip high-volume QFJ internal store events (contain raw FIX message
+                        // bodies). Capture everything else (especially "Encountered exception:"
+                        // lines where QFJ logs IOException subclasses including SSLException).
+                        if (text.startsWith("Enqueued at pos")
+                                || text.startsWith("Persistent store")
+                                || text.startsWith("Resent requested")
+                                || text.startsWith("Resending message")) {
+                            return;
+                        }
                         errorLog.logSessionEvent(sessionID.toString(), "EVENT", text);
                     }
                     public void onErrorEvent(String text) {

@@ -32,6 +32,7 @@ public class ServerApp {
 
         PrintWriter errorFile = openErrorFile("server-errors.log");
         errorFile.printf("%n=== Server session started %s ===%n", LocalDateTime.now().format(FMT));
+        errorFile.printf("    server-errors.log: session events and errors (file only)%n");
         errorFile.flush();
 
         MessageStoreFactory storeFactory = new MemoryStoreFactory();
@@ -39,11 +40,16 @@ public class ServerApp {
             public void onIncoming(String message) {}
             public void onOutgoing(String message) {}
             public void onEvent(String text) {
-                // Log ALL events — QFJ routes IOException subclasses (SSLException etc.)
-                // through onEvent(), so filtering would hide the real disconnect cause.
+                // Skip high-volume QFJ internal store events (contain raw FIX message bodies).
+                // Only write meaningful session lifecycle / error events to the log file.
+                if (text.startsWith("Enqueued at pos")
+                        || text.startsWith("Persistent store")
+                        || text.startsWith("Resent requested")
+                        || text.startsWith("Resending message")) {
+                    return;
+                }
                 String line = String.format("%s  server-EVENT  sid=%-40s  %s",
                     LocalDateTime.now().format(FMT), sessionID, text);
-                System.err.println(line);
                 synchronized (errorFile) {
                     errorFile.println(line);
                     errorFile.flush();
@@ -52,7 +58,6 @@ public class ServerApp {
             public void onErrorEvent(String text) {
                 String line = String.format("%s  server-ERROR  sid=%-40s  %s",
                     LocalDateTime.now().format(FMT), sessionID, text);
-                System.err.println(line);
                 synchronized (errorFile) {
                     errorFile.println(line);
                     errorFile.flush();
@@ -71,7 +76,7 @@ public class ServerApp {
             try { ports.add(settings.getString(sid, "SocketAcceptPort")); } catch (Exception ignored) {}
         }
         System.out.println("Server started, listening on port(s): " + String.join(", ", ports));
-        System.out.println("Server error details logged to: server-errors.log");
+        System.out.println("Session errors → server-errors.log");
 
         AtomicLong lastCount = new AtomicLong(0);
         long[] iteration = {0};

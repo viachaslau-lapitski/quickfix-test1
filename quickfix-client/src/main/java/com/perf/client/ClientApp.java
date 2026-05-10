@@ -218,6 +218,7 @@ public class ClientApp {
                     public void onOutgoing(String message) {}
                     public void onEvent(String text) {}
                     public void onErrorEvent(String text) {}
+                    public void onWarnEvent(String text) {}
                     public void clear() {}
                 };
             default:

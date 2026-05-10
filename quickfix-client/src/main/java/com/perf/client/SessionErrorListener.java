@@ -1,5 +1,6 @@
 package com.perf.client;
 
+import quickfix.SessionID;
 import quickfix.SessionStateListener;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -37,40 +38,40 @@ public class SessionErrorListener implements SessionStateListener {
     }
 
     @Override
-    public void onMissedHeartBeat() {
+    public void onMissedHeartBeat(SessionID sessionID) {
         long count = transientErrors.incrementAndGet();
-        errorLog.logTransient("session", count, new RuntimeException("Missed heartbeat"));
+        errorLog.logTransient(String.valueOf(sessionID), count, new RuntimeException("Missed heartbeat"));
     }
 
     @Override
-    public void onHeartBeatTimeout() {
+    public void onHeartBeatTimeout(SessionID sessionID) {
         long count = transientErrors.incrementAndGet();
-        errorLog.logTransient("session", count, new RuntimeException("Heartbeat timeout"));
+        errorLog.logTransient(String.valueOf(sessionID), count, new RuntimeException("Heartbeat timeout"));
     }
 
     @Override
-    public void onDisconnect() {
+    public void onDisconnect(SessionID sessionID) {
         long count = channelBreaks.incrementAndGet();
         System.err.printf("[Client] Channel broken #%d (disconnect) — see errors.log%n", count);
-        errorLog.logChannelBroken("session", count, "onDisconnect");
+        errorLog.logChannelBroken(String.valueOf(sessionID), count, "onDisconnect");
     }
 
     @Override
-    public void onConnectException(Exception e) {
+    public void onConnectException(SessionID sessionID, Exception e) {
         long count = channelBreaks.incrementAndGet();
         System.err.printf("[Client] Channel broken #%d (%s) — see errors.log%n",
             count, e.getClass().getSimpleName());
-        errorLog.logChannelBroken("session", count, e);
+        errorLog.logChannelBroken(String.valueOf(sessionID), count, e);
     }
 
     // ---- no-op lifecycle events ----
 
-    @Override public void onConnect() {}
-    @Override public void onLogon() {}
-    @Override public void onLogout() {}
-    @Override public void onReset() {}
-    @Override public void onRefresh() {}
-    @Override public void onResendRequestSent(int beginSeqNo, int endSeqNo, int currentEndSeqNo) {}
-    @Override public void onSequenceResetReceived(int newSeqNo, boolean gapFillFlag) {}
-    @Override public void onResendRequestSatisfied(int beginSeqNo, int endSeqNo) {}
+    @Override public void onConnect(SessionID sessionID) {}
+    @Override public void onLogon(SessionID sessionID) {}
+    @Override public void onLogout(SessionID sessionID) {}
+    @Override public void onReset(SessionID sessionID) {}
+    @Override public void onRefresh(SessionID sessionID) {}
+    @Override public void onResendRequestSent(SessionID sessionID, int beginSeqNo, int endSeqNo, int currentEndSeqNo) {}
+    @Override public void onSequenceResetReceived(SessionID sessionID, int newSeqNo, boolean gapFillFlag) {}
+    @Override public void onResendRequestSatisfied(SessionID sessionID, int beginSeqNo, int endSeqNo) {}
 }

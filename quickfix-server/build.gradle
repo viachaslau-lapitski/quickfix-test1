@@ -16,10 +16,10 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.quickfixj:quickfixj-all:2.3.2'
+    implementation 'org.quickfixj:quickfixj-all:3.0.0'
     // SLF4J simple binding so MINA WARN/ERROR log lines reach the console.
     // quickfixj-all ships slf4j-api but no binding; without this MINA is silent.
-    runtimeOnly 'org.slf4j:slf4j-simple:1.7.36'
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.16'
 }
 
 jar {

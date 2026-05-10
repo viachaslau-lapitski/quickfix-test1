@@ -1,0 +1,27 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "use-plain-cfg",
+            "type": "shell",
+            "command": "cp client-plain.cfg client.cfg",
+            "options": {
+                "cwd": "${workspaceFolder}/run"
+            },
+            "presentation": {
+                "reveal": "silent"
+            }
+        },
+        {
+            "label": "use-ssl-cfg",
+            "type": "shell",
+            "command": "cp client-ssl.cfg client.cfg",
+            "options": {
+                "cwd": "${workspaceFolder}/run"
+            },
+            "presentation": {
+                "reveal": "silent"
+            }
+        }
+    ]
+}

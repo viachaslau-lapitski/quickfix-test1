@@ -32,8 +32,8 @@ out/
 .classpath
 .project
 
-# VS Code
-.vscode/
+# VS Code — track project debug configs, ignore personal settings overrides
+.vscode/*.code-workspace
 
 # macOS
 .DS_Store

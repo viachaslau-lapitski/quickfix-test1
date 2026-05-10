@@ -1,0 +1,15 @@
+{
+    "java.import.gradle.enabled": true,
+    "java.import.gradle.wrapper.enabled": true,
+    "java.import.gradle.version": "wrapper",
+    "java.configuration.updateBuildConfiguration": "automatic",
+
+    // Auto-download sources for all dependencies (including MINA 2.2.4)
+    // so you can set breakpoints directly in SSLHandlerG1, SslFilter, etc.
+    "java.maven.downloadSources": true,
+    "java.gradle.downloadSources": true,
+
+    // Show decompiled class files when sources aren't available
+    "java.jdt.ls.lombokSupport.enabled": false,
+    "java.showBuildStatusOnStart.enabled": "notification"
+}

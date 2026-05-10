@@ -1,0 +1,41 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Debug Client (plain TCP)",
+            "request": "launch",
+            "mainClass": "com.perf.client.ClientApp",
+            "projectName": "quickfix-client",
+            "cwd": "${workspaceFolder}/run",
+            "preLaunchTask": "use-plain-cfg",
+            "console": "integratedTerminal"
+        },
+        {
+            "type": "java",
+            "name": "Debug Client (SSL)",
+            "request": "launch",
+            "mainClass": "com.perf.client.ClientApp",
+            "projectName": "quickfix-client",
+            "cwd": "${workspaceFolder}/run",
+            "preLaunchTask": "use-ssl-cfg",
+            "console": "integratedTerminal"
+        },
+        {
+            "type": "java",
+            "name": "Debug Server",
+            "request": "launch",
+            "mainClass": "com.perf.server.ServerApp",
+            "projectName": "quickfix-server",
+            "cwd": "${workspaceFolder}/run",
+            "console": "integratedTerminal"
+        },
+        {
+            "type": "java",
+            "name": "Attach to running process (port 5005)",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 5005
+        }
+    ]
+}

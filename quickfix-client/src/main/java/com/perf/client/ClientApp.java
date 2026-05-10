@@ -16,6 +16,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -29,11 +30,12 @@ public class ClientApp {
         String store = appProps.getProperty("store", "memory");
         String log = appProps.getProperty("log", "none");
         boolean spread = Boolean.parseBoolean(appProps.getProperty("spread", "false"));
+        int inflight = Integer.parseInt(appProps.getProperty("inflight", "4"));
         final int finalTps = tps;
         final int finalProd = prod;
         final int finalLen = len;
-        System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s log=%s spread=%b%n",
-            finalTps, finalProd, finalLen, store, log, spread);
+        System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s log=%s spread=%b inflight=%d%n",
+            finalTps, finalProd, finalLen, store, log, spread, inflight);
 
         AtomicLong transientErrors = new AtomicLong(0);
         AtomicLong channelBreaks = new AtomicLong(0);
@@ -46,7 +48,9 @@ public class ClientApp {
         System.out.println("Client error details logged to: errors.log");
 
         SessionErrorListener errorListener = new SessionErrorListener(transientErrors, channelBreaks, errorLog);
-        ClientApplication application = new ClientApplication(errorListener);
+        // Start semaphore at 0; onLogon() will drain + release(inflight) once connected.
+        Semaphore writeSem = new Semaphore(0);
+        ClientApplication application = new ClientApplication(errorListener, inflight, writeSem);
 
         try (InputStream configStream = openConfigStream("client.cfg")) {
             SessionSettings settings = new SessionSettings(configStream);
@@ -98,15 +102,29 @@ public class ClientApp {
                 for (int i = 0; i < finalProd; i++) {
                     producers[i] = Executors.newSingleThreadScheduledExecutor();
                     producers[i].scheduleAtFixedRate(() -> {
+                        boolean acquired = false;
                         try {
+                            // Block until a slot is free; unblocks when onLogon releases permits.
+                            // tryAcquire with timeout so the thread responds to shutdown signals.
+                            if (!writeSem.tryAcquire(200, TimeUnit.MILLISECONDS)) return;
+                            acquired = true;
                             NewOrderSingle msg = (NewOrderSingle) template.clone();
                             msg.set(new TransactTime());
                             counter.incrementAndGet();
                             long start = System.nanoTime();
-                            Session.sendToTarget(msg, sessionID);
+                            boolean sent = Session.sendToTarget(msg, sessionID);
                             long elapsed = System.nanoTime() - start;
-                            sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
+                            if (!sent) {
+                                // No MINA write queued — release permit ourselves.
+                                writeSem.release();
+                                acquired = false;
+                            } else {
+                                sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
                         } catch (Exception e) {
+                            if (acquired) writeSem.release();
                             long count = transientErrors.incrementAndGet();
                             errorLog.logTransient("sendToTarget", count, e);
                         }
@@ -118,15 +136,27 @@ public class ClientApp {
                     producers[i] = Executors.newSingleThreadScheduledExecutor();
                     producers[i].scheduleAtFixedRate(() -> {
                         for (int j = 0; j < msgsPerProd; j++) {
+                            boolean acquired = false;
                             try {
+                                if (!writeSem.tryAcquire(200, TimeUnit.MILLISECONDS)) continue;
+                                acquired = true;
                                 NewOrderSingle msg = (NewOrderSingle) template.clone();
                                 msg.set(new TransactTime());
                                 counter.incrementAndGet();
                                 long start = System.nanoTime();
-                                Session.sendToTarget(msg, sessionID);
+                                boolean sent = Session.sendToTarget(msg, sessionID);
                                 long elapsed = System.nanoTime() - start;
-                                sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
+                                if (!sent) {
+                                    writeSem.release();
+                                    acquired = false;
+                                } else {
+                                    sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
+                                }
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                break;
                             } catch (Exception e) {
+                                if (acquired) writeSem.release();
                                 long count = transientErrors.incrementAndGet();
                                 errorLog.logTransient("sendToTarget", count, e);
                             }

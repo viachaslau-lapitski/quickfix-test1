@@ -57,10 +57,17 @@ The client reads `app.properties` from the working directory first, then the cla
 | `len`    | `75`    | Target FIX message body length in bytes (padded via `Text` field) |
 | `store`  | `memory`| Message store: `memory`, `file`, `cachedfile` |
 | `log`    | `none`  | Logging backend: `none`, `file`, `console` |
+| `spread` | `false` | `true` = send one message every `(1s/tps)` instead of bursting all at second boundaries. **Required for SSL with `len > 16383`** — see [SSL note](#ssl-large-message-note) below. |
 
 **Store backends:** `memory` → `MemoryStoreFactory` (no I/O); `file` → `FileStoreFactory` (needs `FileStorePath` in `client.cfg`); `cachedfile` → `CachedFileStoreFactory`.
 
 **Log backends:** `none` → no-op (best performance); `file` → `FileLogFactory` (needs `FileLogPath` in `client.cfg`); `console` → `ScreenLogFactory`.
+
+### SSL large-message note
+
+When running with `--ssl` and `len > 16383` (one TLS record = 16384 bytes max), burst mode causes `SSLException: Tag mismatch!` on the server and channel breaks every few seconds. Root cause: a race condition in MINA 2.2.4's `SSLHandlerG1.forward_writes()` (not synchronized) that allows TLS record chunks for a single large message to be submitted to the socket in wrong order — the server's AEAD tag verification then fails.
+
+Set `spread=true` in `app.properties` (or use `len ≤ 16383`) to eliminate this. Both are recorded in `run/errors.log` (client) and `run/server-errors.log` (server).
 
 ## Run
 

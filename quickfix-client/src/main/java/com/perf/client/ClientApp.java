@@ -28,11 +28,12 @@ public class ClientApp {
         int len = Integer.parseInt(appProps.getProperty("len", "100"));
         String store = appProps.getProperty("store", "memory");
         String log = appProps.getProperty("log", "none");
+        boolean spread = Boolean.parseBoolean(appProps.getProperty("spread", "false"));
         final int finalTps = tps;
         final int finalProd = prod;
         final int finalLen = len;
-        System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s log=%s%n",
-            finalTps, finalProd, finalLen, store, log);
+        System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s log=%s spread=%b%n",
+            finalTps, finalProd, finalLen, store, log, spread);
 
         AtomicLong transientErrors = new AtomicLong(0);
         AtomicLong channelBreaks = new AtomicLong(0);
@@ -84,13 +85,19 @@ public class ClientApp {
             AtomicLong lastP95Nanos = new AtomicLong(0);
             AtomicLong lastP99Nanos = new AtomicLong(0);
             AtomicLong lastP100Nanos = new AtomicLong(0);
-            int msgsPerProd = finalTps;
 
+            // spread=true: send one message every (1s/tps) to avoid concurrent TLS record
+            // encoding in MINA's SSLHandlerG1.forward_writes() which causes Tag mismatch!
+            // when messages exceed one TLS record (>16383 bytes). Each producer independently
+            // sends the full tps rate; prod multiplies total throughput.
+            // spread=false: burst all tps messages at once each second (may cause Tag mismatch
+            // with SSL + large messages due to MINA 2.2.4 bug DIRMINA-1176 / forward_writes race).
             ScheduledExecutorService[] producers = new ScheduledExecutorService[finalProd];
-            for (int i = 0; i < finalProd; i++) {
-                producers[i] = Executors.newSingleThreadScheduledExecutor();
-                producers[i].scheduleAtFixedRate(() -> {
-                    for (int j = 0; j < msgsPerProd; j++) {
+            if (spread) {
+                long intervalNanos = 1_000_000_000L / finalTps;
+                for (int i = 0; i < finalProd; i++) {
+                    producers[i] = Executors.newSingleThreadScheduledExecutor();
+                    producers[i].scheduleAtFixedRate(() -> {
                         try {
                             NewOrderSingle msg = (NewOrderSingle) template.clone();
                             msg.set(new TransactTime());
@@ -103,8 +110,29 @@ public class ClientApp {
                             long count = transientErrors.incrementAndGet();
                             errorLog.logTransient("sendToTarget", count, e);
                         }
-                    }
-                }, 0, 1, TimeUnit.SECONDS);
+                    }, 0, intervalNanos, TimeUnit.NANOSECONDS);
+                }
+            } else {
+                int msgsPerProd = finalTps;
+                for (int i = 0; i < finalProd; i++) {
+                    producers[i] = Executors.newSingleThreadScheduledExecutor();
+                    producers[i].scheduleAtFixedRate(() -> {
+                        for (int j = 0; j < msgsPerProd; j++) {
+                            try {
+                                NewOrderSingle msg = (NewOrderSingle) template.clone();
+                                msg.set(new TransactTime());
+                                counter.incrementAndGet();
+                                long start = System.nanoTime();
+                                Session.sendToTarget(msg, sessionID);
+                                long elapsed = System.nanoTime() - start;
+                                sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
+                            } catch (Exception e) {
+                                long count = transientErrors.incrementAndGet();
+                                errorLog.logTransient("sendToTarget", count, e);
+                            }
+                        }
+                    }, 0, 1, TimeUnit.SECONDS);
+                }
             }
 
             AtomicLong lastCount = new AtomicLong(0);

@@ -1,0 +1,10 @@
+16:25:38.511 [NioProcessor-2] ERROR InitiatorIoHandler - Socket (localhost/127.0.0.1:9877): org.apache.mina.core.write.WriteToClosedSessionException
+org.apache.mina.core.write.WriteToClosedSessionException
+        at org.apache.mina.core.polling.AbstractPollingIoProcessor$Processor.clearWriteRequestQueue(AbstractPollingIoProcessor.java:1192)
+        at org.apache.mina.core.polling.AbstractPollingIoProcessor$Processor.removeNow(AbstractPollingIoProcessor.java:1153)
+        at org.apache.mina.core.polling.AbstractPollingIoProcessor$Processor.removeSessions(AbstractPollingIoProcessor.java:864)
+        at org.apache.mina.core.polling.AbstractPollingIoProcessor$Processor.run(AbstractPollingIoProcessor.java:694)
+        at org.apache.mina.util.NamePreservingRunnable.run(NamePreservingRunnable.java:64)
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+        at java.base/java.lang.Thread.run(Thread.java:840)

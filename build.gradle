@@ -1,2 +1,14 @@
 // Root build — run `./gradlew shadowJar` from here to build fat JARs for both subprojects.
 // Individual modules can still be built in isolation via their own ./gradlew wrappers.
+
+// Force mina-core 2.2.7 across all subprojects to fix DIRMINA-1186:
+// SSLHandlerG1.ENABLE_ASYNC_TASKS was true in 2.2.4 (bundled with quickfixj-all:2.3.2),
+// causing AEADBadTagException / "Tag mismatch" when sending TLS messages larger than 16 KB.
+// Fixed in 2.2.5 (ENABLE_ASYNC_TASKS = false); 2.2.7 is the latest stable.
+subprojects {
+    configurations.all {
+        resolutionStrategy {
+            force 'org.apache.mina:mina-core:2.2.7'
+        }
+    }
+}

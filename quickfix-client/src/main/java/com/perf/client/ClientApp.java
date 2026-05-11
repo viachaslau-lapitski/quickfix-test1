@@ -3,6 +3,7 @@ package com.perf.client;
 import quickfix.*;
 import quickfix.field.*;
 import quickfix.fix42.NewOrderSingle;
+import org.apache.mina.filter.ssl.SslFilter;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.distribution.ValueAtPercentile;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -28,13 +29,12 @@ public class ClientApp {
         int len = Integer.parseInt(appProps.getProperty("len", "100"));
         String store = appProps.getProperty("store", "memory");
         String log = appProps.getProperty("log", "none");
-        boolean spread = Boolean.parseBoolean(appProps.getProperty("spread", "false"));
         int inflight = Integer.parseInt(appProps.getProperty("inflight", "4"));
         final int finalTps = tps;
         final int finalProd = prod;
         final int finalLen = len;
-        System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s log=%s spread=%b inflight=%d%n",
-            finalTps, finalProd, finalLen, store, log, spread, inflight);
+        System.out.printf("Client starting: tps=%d prod=%d len=%d store=%s log=%s inflight=%d%n",
+            finalTps, finalProd, finalLen, store, log, inflight);
 
         AtomicLong transientErrors = new AtomicLong(0);
         AtomicLong channelBreaks = new AtomicLong(0);
@@ -59,8 +59,14 @@ public class ClientApp {
             SocketInitiator initiator = new SocketInitiator(
                     application, storeFactory, settings, logFactory, messageFactory);
 
+            // Force SSLHandlerG1 (ENABLE_ASYNC_TASKS=false, fixed) instead of SSLHandlerG0
+            // (ENABLE_ASYNC_TASKS=true, buggy). QuickFIX/J hardcodes nonBlockingPipeline=false
+            // in new SslFilter(ctx, false), always selecting the unfixed G0 handler.
+            // Setting it to true here routes to G1 which has the DIRMINA-1186 fix.
             initiator.setIoFilterChainBuilder(chain ->
-                chain.addFirst(SSLWriteThrottleFilter.NAME, new SSLWriteThrottleFilter(inflight)));
+                chain.getAll().stream()
+                    .filter(e -> e.getFilter() instanceof SslFilter)
+                    .forEach(e -> ((SslFilter) e.getFilter()).setUseNonBlockingPipeline(true)));
 
             initiator.start();
             System.out.println("Client initiator started, connecting to localhost:9876");
@@ -71,7 +77,7 @@ public class ClientApp {
                 Thread.sleep(100);
             }
             final SessionID sessionID = sid;
-                NewOrderSingle template = ClientMessageSizer.buildTemplate(finalLen, ThreadLocalRandom.current());
+            char[] filler = ClientMessageSizer.buildFiller(finalLen, ThreadLocalRandom.current());
 
             // Wait for logon
             System.out.println("Waiting for session logon...");
@@ -90,50 +96,21 @@ public class ClientApp {
             AtomicLong lastP99Nanos = new AtomicLong(0);
             AtomicLong lastP100Nanos = new AtomicLong(0);
 
-            // spread=true: send one message every (1s/tps) to avoid concurrent TLS record
-            // encoding in MINA's SSLHandlerG1.forward_writes() which causes Tag mismatch!
-            // when messages exceed one TLS record (>16383 bytes). Each producer independently
-            // sends the full tps rate; prod multiplies total throughput.
-            // spread=false: burst all tps messages at once each second (may cause Tag mismatch
-            // with SSL + large messages due to MINA 2.2.4 bug DIRMINA-1176 / forward_writes race).
+
             ScheduledExecutorService[] producers = new ScheduledExecutorService[finalProd];
-            if (spread) {
-                long intervalNanos = 1_000_000_000L / finalTps;
-                for (int i = 0; i < finalProd; i++) {
-                    producers[i] = Executors.newSingleThreadScheduledExecutor();
-                    producers[i].scheduleAtFixedRate(() -> {
-                        try {
-                            NewOrderSingle msg = (NewOrderSingle) template.clone();
-                            msg.set(new TransactTime());
-                            counter.incrementAndGet();
-                            long start = System.nanoTime();
-                            boolean sent = Session.sendToTarget(msg, sessionID);
-                            long elapsed = System.nanoTime() - start;
-                            if (sent) {
-                                sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
-                            }
-                        } catch (Exception e) {
-                            long count = transientErrors.incrementAndGet();
-                            errorLog.logTransient("sendToTarget", count, e);
-                        }
-                    }, 0, intervalNanos, TimeUnit.NANOSECONDS);
-                }
-            } else {
-                int msgsPerProd = finalTps;
+            int msgsPerProd = finalTps;
                 for (int i = 0; i < finalProd; i++) {
                     producers[i] = Executors.newSingleThreadScheduledExecutor();
                     producers[i].scheduleAtFixedRate(() -> {
                         for (int j = 0; j < msgsPerProd; j++) {
                             try {
-                                NewOrderSingle msg = (NewOrderSingle) template.clone();
+                                NewOrderSingle msg = ClientMessageSizer.buildMessage(filler);
                                 msg.set(new TransactTime());
                                 counter.incrementAndGet();
                                 long start = System.nanoTime();
-                                boolean sent = Session.sendToTarget(msg, sessionID);
+                                Session.sendToTarget(msg, sessionID);
                                 long elapsed = System.nanoTime() - start;
-                                if (sent) {
-                                    sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
-                                }
+                                sendTimer.record(elapsed, TimeUnit.NANOSECONDS);
                             } catch (Exception e) {
                                 long count = transientErrors.incrementAndGet();
                                 errorLog.logTransient("sendToTarget", count, e);
@@ -141,7 +118,6 @@ public class ClientApp {
                         }
                     }, 0, 1, TimeUnit.SECONDS);
                 }
-            }
 
             AtomicLong lastCount = new AtomicLong(0);
             long[] iteration = {0};

@@ -11,4 +11,8 @@ if [[ ! -f "$JAR_PATH" ]]; then
 fi
 
 cd "$SCRIPT_DIR"
+
+echo "Cleaning up previous run artifacts..."
+rm -f server-errors.log
+
 exec java -jar "$JAR_PATH"

@@ -10,6 +10,43 @@ import java.util.Random;
 final class ClientMessageSizer {
     private ClientMessageSizer() {}
 
+    /**
+     * Returns the precomputed Text-field padding (as chars) that makes a fresh
+     * NewOrderSingle reach {@code targetBodyLength}. Call once at startup; pass
+     * the result to {@link #buildMessage(char[])} on every send.
+     */
+    static char[] buildFiller(int targetBodyLength, Random random) {
+        NewOrderSingle template = buildTemplate(targetBodyLength, random);
+        try {
+            return template.getString(Text.FIELD).toCharArray();
+        } catch (FieldNotFound e) {
+            return new char[0];
+        }
+    }
+
+    /**
+     * Creates a fresh {@link NewOrderSingle} with all fixed fields set and the
+     * Text field initialised from a private copy of {@code filler} (via
+     * {@code new String(filler)}) so each message owns its own string storage.
+     * Call {@code msg.set(new TransactTime())} after this to stamp the actual
+     * send time.
+     */
+    static NewOrderSingle buildMessage(char[] filler) {
+        NewOrderSingle msg = new NewOrderSingle(
+                new ClOrdID("ORDER"),
+                new HandlInst('1'),
+                new Symbol("AAPL"),
+                new Side(Side.BUY),
+                new TransactTime(),
+                new OrdType(OrdType.MARKET)
+        );
+        msg.set(new OrderQty(100));
+        if (filler.length > 0) {
+            msg.setString(Text.FIELD, new String(filler));
+        }
+        return msg;
+    }
+
     static NewOrderSingle buildTemplate(int targetBodyLength, Random random) {
         NewOrderSingle template = new NewOrderSingle(
                 new ClOrdID("ORDER"),

@@ -27,6 +27,8 @@ bin/
 *.iws
 out/
 
+docs/
+
 # Eclipse
 .eclipse
 .settings/

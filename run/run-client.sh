@@ -76,6 +76,10 @@ fi
 
 cd "$SCRIPT_DIR"
 
+echo "Cleaning up previous run artifacts..."
+rm -f errors.log
+rm -rf logs
+
 if [[ "$SSL_MODE" -eq 1 ]]; then
   if [[ ! -f "client-ssl.cfg" ]]; then
     echo "Missing client-ssl.cfg in $SCRIPT_DIR"

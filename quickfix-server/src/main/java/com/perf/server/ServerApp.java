@@ -1,6 +1,7 @@
 package com.perf.server;
 
 import quickfix.*;
+import org.apache.mina.filter.ssl.SslFilter;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -69,6 +70,13 @@ public class ServerApp {
 
         SocketAcceptor acceptor = new SocketAcceptor(
                 application, storeFactory, settings, logFactory, messageFactory);
+
+        // Force SSLHandlerG1 (ENABLE_ASYNC_TASKS=false, fixed) instead of SSLHandlerG0.
+        // See ClientApp.java for full explanation.
+        acceptor.setIoFilterChainBuilder(chain ->
+            chain.getAll().stream()
+                .filter(e -> e.getFilter() instanceof SslFilter)
+                .forEach(e -> ((SslFilter) e.getFilter()).setUseNonBlockingPipeline(true)));
 
         acceptor.start();
         List<String> ports = new ArrayList<>();

@@ -38,13 +38,7 @@ public class ClientApp {
 
         AtomicLong transientErrors = new AtomicLong(0);
         AtomicLong channelBreaks = new AtomicLong(0);
-        ErrorLog errorLog;
-        try {
-            errorLog = new ErrorLog("errors.log");
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to open errors.log", e);
-        }
-        System.out.println("Client error details logged to: errors.log");
+        ErrorLog errorLog = new ErrorLog("errors.log");
 
         SessionErrorListener errorListener = new SessionErrorListener(transientErrors, channelBreaks, errorLog);
         ClientApplication application = new ClientApplication(errorListener);
@@ -53,7 +47,7 @@ public class ClientApp {
             SessionSettings settings = new SessionSettings(configStream);
 
             MessageStoreFactory storeFactory = buildStoreFactory(store, settings);
-            LogFactory logFactory = buildLogFactory(log, settings, errorLog);
+            LogFactory logFactory = buildLogFactory(log, settings, errorLog, transientErrors);
             MessageFactory messageFactory = new DefaultMessageFactory();
 
             SocketInitiator initiator = new SocketInitiator(
@@ -216,7 +210,7 @@ public class ClientApp {
         }
     }
 
-    private static LogFactory buildLogFactory(String log, SessionSettings settings, ErrorLog errorLog) {
+    private static LogFactory buildLogFactory(String log, SessionSettings settings, ErrorLog errorLog, AtomicLong transientErrors) {
         String normalized = log == null ? "" : log.trim().toLowerCase();
         switch (normalized) {
             case "file":
@@ -243,6 +237,10 @@ public class ClientApp {
                         errorLog.logSessionEvent(sessionID.toString(), "EVENT", text);
                     }
                     public void onErrorEvent(String text) {
+                        // QFJ catches send-path exceptions (e.g. BufferOverflowException)
+                        // internally and routes them here instead of re-throwing from
+                        // sendToTarget(), so this is where we count them.
+                        transientErrors.incrementAndGet();
                         errorLog.logSessionEvent(sessionID.toString(), "ERROR", text);
                     }
                     public void onWarnEvent(String text) {

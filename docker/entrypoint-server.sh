@@ -24,4 +24,4 @@ apply_netem() {
 apply_netem
 
 # shellcheck disable=SC2086
-exec java ${JVM_OPTS:-} -jar /app/server.jar
+exec java ${JVM_OPTS:-} -Dlogback.configurationFile=/app/logback-server.xml -jar /app/server.jar

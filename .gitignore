@@ -6,9 +6,10 @@ run/store
 run/logs
 run/client.cfg
 run/server.log
-errors.log
 run/errors.log
 run/server-errors.log
+run/server-debug.log
+run/debug.log
 
 # IDE output (Eclipse)
 bin/

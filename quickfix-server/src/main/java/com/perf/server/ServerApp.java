@@ -1,12 +1,12 @@
 package com.perf.server;
 
-import quickfix.*;
 import org.apache.mina.filter.ssl.SslFilter;
-import java.io.BufferedWriter;
-import java.io.FileWriter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import quickfix.*;
+
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class ServerApp {
 
+    private static final Logger SESSION_LOG = LoggerFactory.getLogger("server.errors");
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public static void main(String[] args) throws Exception {
@@ -31,15 +32,14 @@ public class ServerApp {
         InputStream configStream = openConfigStream("server.cfg");
         SessionSettings settings = new SessionSettings(configStream);
 
-        PrintWriter errorFile = openErrorFile("server-errors.log");
-        errorFile.printf("%n=== Server session started %s ===%n", LocalDateTime.now().format(FMT));
-        errorFile.printf("    server-errors.log: session events and errors (file only)%n");
-        errorFile.flush();
+        SESSION_LOG.info("=== Server session started {} ===", LocalDateTime.now().format(FMT));
 
         MessageStoreFactory storeFactory = new MemoryStoreFactory();
         LogFactory logFactory = sessionID -> new Log() {
             public void onIncoming(String message) {}
+
             public void onOutgoing(String message) {}
+
             public void onEvent(String text) {
                 // Skip high-volume QFJ internal store events (contain raw FIX message bodies).
                 // Only write meaningful session lifecycle / error events to the log file.
@@ -49,21 +49,15 @@ public class ServerApp {
                         || text.startsWith("Resending message")) {
                     return;
                 }
-                String line = String.format("%s  server-EVENT  sid=%-40s  %s",
+                SESSION_LOG.info("{}  server-EVENT  sid={}  {}",
                     LocalDateTime.now().format(FMT), sessionID, text);
-                synchronized (errorFile) {
-                    errorFile.println(line);
-                    errorFile.flush();
-                }
             }
+
             public void onErrorEvent(String text) {
-                String line = String.format("%s  server-ERROR  sid=%-40s  %s",
+                SESSION_LOG.error("{}  server-ERROR  sid={}  {}",
                     LocalDateTime.now().format(FMT), sessionID, text);
-                synchronized (errorFile) {
-                    errorFile.println(line);
-                    errorFile.flush();
-                }
             }
+
             public void clear() {}
         };
         MessageFactory messageFactory = new DefaultMessageFactory();
@@ -84,7 +78,6 @@ public class ServerApp {
             try { ports.add(settings.getString(sid, "SocketAcceptPort")); } catch (Exception ignored) {}
         }
         System.out.println("Server started, listening on port(s): " + String.join(", ", ports));
-        System.out.println("Session errors → server-errors.log");
 
         AtomicLong lastCount = new AtomicLong(0);
         long[] iteration = {0};
@@ -101,20 +94,10 @@ public class ServerApp {
             System.out.println("Server shutting down...");
             scheduler.shutdown();
             try { acceptor.stop(true); } catch (Exception e) { /* ignore */ }
-            synchronized (errorFile) { errorFile.close(); }
             latch.countDown();
         }));
 
         latch.await();
-    }
-
-    private static PrintWriter openErrorFile(String fileName) {
-        try {
-            return new PrintWriter(new BufferedWriter(new FileWriter(fileName, true)));
-        } catch (IOException e) {
-            System.err.println("WARNING: cannot open " + fileName + ": " + e.getMessage());
-            return new PrintWriter(System.err);
-        }
     }
 
     private static InputStream openConfigStream(String fileName) throws IOException {

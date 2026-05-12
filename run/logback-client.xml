@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         Appenders
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <!-- Suppress INFO events that propagate here via logger additivity -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{30} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- DEBUG output from MINA/QFJ internals goes here, NOT to console.
+         Edit the logger entries below to control which packages are captured. -->
+    <appender name="DEBUG_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>debug.log</file>
+        <append>false</append>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n%ex{full}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Structured session events written by ErrorLog — bare message format
+         preserves the existing custom layout (timestamp embedded in message). -->
+    <appender name="ERRORS_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>errors.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%msg%n%ex{full}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         Package-level DEBUG routing → DEBUG_FILE
+         Add or comment out entries here; no rebuild needed.
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- MINA SSL handshake / record-layer debug -->
+    <logger name="org.apache.mina.filter.ssl" level="DEBUG" additivity="false">
+        <appender-ref ref="DEBUG_FILE"/>
+    </logger>
+
+    <!-- MINA framework WARN+ (shutdown interrupts, socket events) → debug.log only.
+         org.apache.mina.filter.ssl above is more specific and wins for SSL logging. -->
+    <logger name="org.apache.mina" level="WARN" additivity="false">
+        <appender-ref ref="DEBUG_FILE"/>
+    </logger>
+
+    <!-- QuickFIX/J internal logs (WARN+) → debug.log; additivity=false keeps them off console.
+         Change WARN to DEBUG to see full QFJ internal trace (very verbose). -->
+    <logger name="quickfix" level="WARN" additivity="false">
+        <appender-ref ref="DEBUG_FILE"/>
+    </logger>
+
+    <!-- Uncomment to capture everything at DEBUG level:
+    <root level="DEBUG">
+        <appender-ref ref="DEBUG_FILE"/>
+    </root>
+    -->
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         Errors file — session events from ErrorLog
+         WARN/ERROR also propagate to root → appear on console too.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <logger name="com.perf.client.ErrorLog" level="INFO" additivity="true">
+        <appender-ref ref="ERRORS_FILE"/>
+    </logger>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         Root — console only, WARN+ (keeps benchmark terminal readable)
+         ═══════════════════════════════════════════════════════════════════ -->
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+</configuration>

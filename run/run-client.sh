@@ -77,7 +77,7 @@ fi
 cd "$SCRIPT_DIR"
 
 echo "Cleaning up previous run artifacts..."
-rm -f errors.log
+rm -f errors.log debug.log
 rm -rf logs
 
 if [[ "$SSL_MODE" -eq 1 ]]; then
@@ -118,7 +118,7 @@ if [[ "$TIMEOUT_SECONDS" != 0 ]]; then
   fi
 fi
 
-BASE_CMD=(java -jar "$JAR_PATH")
+BASE_CMD=(java "-Dlogback.configurationFile=$SCRIPT_DIR/logback-client.xml" -jar "$JAR_PATH")
 if [[ ${#ARGS[@]} -gt 0 ]]; then
   BASE_CMD+=("${ARGS[@]}")
 fi

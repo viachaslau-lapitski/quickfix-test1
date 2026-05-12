@@ -1,75 +1,77 @@
 package com.perf.client;
 
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * Writes transient and channel-break errors to a dedicated file so they don't
- * pollute the main console output. Thread-safe via synchronized writes.
+ * Routes transient and channel-break errors to the dedicated {@code errors.log} appender
+ * configured in {@code logback-client.xml}. Thread-safe via Logback's internal locking.
  */
 public final class ErrorLog implements AutoCloseable {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ErrorLog.class);
 
     private static final DateTimeFormatter FMT =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final PrintWriter writer;
-
     /**
-     * Opens (or appends to) the given path in the current working directory.
-     * Writes a session-start marker so multiple runs are easy to distinguish.
+     * Writes a session-start marker so multiple runs are easy to distinguish in the log file.
+     * No longer throws IOException — the logback appender manages the file handle.
      */
-    public ErrorLog(String path) throws IOException {
-        this.writer = new PrintWriter(new FileWriter(path, /* append */ true), true);
-        writer.printf("%n=== Session started %s ===%n", FMT.format(LocalDateTime.now()));
+    public ErrorLog(String path) {
+        LOGGER.info("=== Session started {} ===", FMT.format(LocalDateTime.now()));
     }
 
     /**
-     * Logs a transient error (channel still alive). Only exception type and message
-     * are recorded — no stack trace — to keep the file readable under high error rates.
+     * Logs a transient error (channel still alive). Stack trace is intentionally omitted
+     * to keep the file readable under high error rates.
      */
-    public synchronized void logTransient(String context, long count, Throwable cause) {
-        writer.printf("%s  transient #%-6d  ctx=%-25s  type=%-35s  msg=%s%n",
+    public void logTransient(String context, long count, Throwable cause) {
+        LOGGER.info("%s  transient #%-6d  ctx=%-25s  type=%-35s  msg=%s".formatted(
             FMT.format(LocalDateTime.now()),
             count,
             context,
             cause.getClass().getSimpleName(),
-            cause.getMessage() != null ? cause.getMessage() : "(null)");
+            cause.getMessage() != null ? cause.getMessage() : "(null)"));
     }
 
     /**
-     * Logs a channel-break error with a full stack trace.
+     * Logs a channel-break error. Logback prints the full stack trace via the
+     * {@code %ex{full}} token in the ERRORS_FILE appender pattern.
      */
-    public synchronized void logChannelBroken(String context, long count, Throwable cause) {
-        writer.printf("%n%s  channel-broken #%d  ctx=%s  type=%s%n",
+    public void logChannelBroken(String context, long count, Throwable cause) {
+        LOGGER.error("%n%s  channel-broken #%d  ctx=%s  type=%s".formatted(
             FMT.format(LocalDateTime.now()), count, context,
-            cause.getClass().getSimpleName());
-        cause.printStackTrace(writer);
-        writer.println();
+            cause.getClass().getSimpleName()), cause);
     }
 
     /**
      * Logs a channel-break event with no associated exception (e.g. onDisconnect).
      */
-    public synchronized void logChannelBroken(String context, long count, String reason) {
-        writer.printf("%n%s  channel-broken #%d  ctx=%s  reason=%s%n",
-            FMT.format(LocalDateTime.now()), count, context, reason);
+    public void logChannelBroken(String context, long count, String reason) {
+        LOGGER.error("%n%s  channel-broken #%d  ctx=%s  reason=%s".formatted(
+            FMT.format(LocalDateTime.now()), count, context, reason));
     }
 
     /**
-     * Logs a QFJ session-level error or warn event (e.g. disconnect reason, SSL error).
-     * Captured from {@code Log.onErrorEvent}/{@code onWarnEvent} — reveals the root cause
-     * of disconnects that would otherwise only appear as a bare {@code onDisconnect()} callback.
+     * Logs a QFJ session-level event captured from {@code Log.onEvent} / {@code onErrorEvent} /
+     * {@code onWarnEvent}. The {@code level} string ("EVENT", "WARN", "ERROR") determines the
+     * SLF4J log level so that WARN/ERROR events also propagate to the console appender.
      */
-    public synchronized void logSessionEvent(String sessionID, String level, String text) {
-        writer.printf("%s  session-%-5s  sid=%-40s  %s%n",
+    public void logSessionEvent(String sessionID, String level, String text) {
+        String msg = "%s  session-%-5s  sid=%-40s  %s".formatted(
             FMT.format(LocalDateTime.now()), level, sessionID, text);
+        // All QFJ session events go to errors.log only; the per-second stat line on the
+        // console already shows transient_errors and channel_breaks counts.
+        LOGGER.info(msg);
     }
 
     @Override
     public void close() {
-        writer.close();
+        LOGGER.info("=== Session ended {} ===", FMT.format(LocalDateTime.now()));
+        // Logback manages the file handle; no explicit close needed.
     }
 }

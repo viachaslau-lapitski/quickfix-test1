@@ -27,4 +27,4 @@ apply_netem
 rm -rf /tmp/logs /tmp/store
 
 # shellcheck disable=SC2086
-exec java ${JVM_OPTS:-} -jar /app/client.jar
+exec java ${JVM_OPTS:-} -Dlogback.configurationFile=/app/logback-client.xml -jar /app/client.jar

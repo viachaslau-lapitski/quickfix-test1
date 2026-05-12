@@ -51,15 +51,12 @@ public class SessionErrorListener implements SessionStateListener {
     @Override
     public void onDisconnect() {
         long count = channelBreaks.incrementAndGet();
-        System.err.printf("[Client] Channel broken #%d (disconnect) — see errors.log%n", count);
         errorLog.logChannelBroken("session", count, "onDisconnect");
     }
 
     @Override
     public void onConnectException(Exception e) {
         long count = channelBreaks.incrementAndGet();
-        System.err.printf("[Client] Channel broken #%d (%s) — see errors.log%n",
-            count, e.getClass().getSimpleName());
         errorLog.logChannelBroken("session", count, e);
     }
 

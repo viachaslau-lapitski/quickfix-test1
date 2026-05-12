@@ -31,6 +31,7 @@ services:
       - NET_ADMIN          # required for tc netem
     volumes:
       - ./docker/server-ssl.cfg:/app/server.cfg:ro
+      - ./docker/logback-server.xml:/app/logback-server.xml:ro
       - ./run/certs:/app/certs:ro
     environment:
       LAT_MS:        ${LAT_MS:-0}
@@ -66,6 +67,7 @@ services:
     volumes:
       - ./docker/client-ssl.cfg:/app/client.cfg:ro
       - ./docker/app.properties:/app/app.properties:ro
+      - ./docker/logback-client.xml:/app/logback-client.xml:ro
       - ./run/certs:/app/certs:ro
     environment:
       LAT_MS:        ${LAT_MS:-0}

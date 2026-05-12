@@ -13,6 +13,6 @@ fi
 cd "$SCRIPT_DIR"
 
 echo "Cleaning up previous run artifacts..."
-rm -f server-errors.log
+rm -f server-errors.log server-debug.log
 
-exec java -jar "$JAR_PATH"
+exec java "-Dlogback.configurationFile=$SCRIPT_DIR/logback-server.xml" -jar "$JAR_PATH"

@@ -30,6 +30,7 @@ public class ClientApp {
         String store = appProps.getProperty("store", "memory");
         String log = appProps.getProperty("log", "none");
         int inflight = Integer.parseInt(appProps.getProperty("inflight", "4"));
+
         final int finalTps = tps;
         final int finalProd = prod;
         final int finalLen = len;
@@ -53,14 +54,22 @@ public class ClientApp {
             SocketInitiator initiator = new SocketInitiator(
                     application, storeFactory, settings, logFactory, messageFactory);
 
-            // Force SSLHandlerG1 (ENABLE_ASYNC_TASKS=false, fixed) instead of SSLHandlerG0
-            // (ENABLE_ASYNC_TASKS=true, buggy). QuickFIX/J hardcodes nonBlockingPipeline=false
-            // in new SslFilter(ctx, false), always selecting the unfixed G0 handler.
-            // Setting it to true here routes to G1 which has the DIRMINA-1186 fix.
+            // Prevent BufferOverflowException in MINA's SSL handler (mEncodeQueue, max 64 entries).
+            // One shared filter instance is reused across all reconnects; sessionClosed resets
+            // the semaphore cleanly via drainPermits + release(inflight).
+            // The acquire happens at the producer level (before sendToTarget), matching the
+            // mina-test1 pattern — the filter only releases in messageSent.
+            int finalInflight = inflight;
+            SslWriteOrderFilter orderFilter = new SslWriteOrderFilter();
+            SSLWriteThrottleFilter throttleFilter = new SSLWriteThrottleFilter(finalInflight, orderFilter);
             initiator.setIoFilterChainBuilder(chain ->
                 chain.getAll().stream()
                     .filter(e -> e.getFilter() instanceof SslFilter)
-                    .forEach(e -> ((SslFilter) e.getFilter()).setUseNonBlockingPipeline(true)));
+                    .findFirst()
+                    .ifPresent(ssl -> {
+                        chain.addAfter(ssl.getName(), SSLWriteThrottleFilter.NAME, throttleFilter);
+                        chain.addBefore(ssl.getName(), SslWriteOrderFilter.NAME, orderFilter);
+                    }));
 
             initiator.start();
             System.out.println("Client initiator started, connecting to localhost:9876");
@@ -97,6 +106,20 @@ public class ClientApp {
                     producers[i] = Executors.newSingleThreadScheduledExecutor();
                     producers[i].scheduleAtFixedRate(() -> {
                         for (int j = 0; j < msgsPerProd; j++) {
+                            // Acquire back-pressure permit BEFORE sending (mina-test1 pattern).
+                            // The filter releases the permit in messageSent once the write completes.
+                            try {
+                                throttleFilter.acquire();
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                return;
+                            }
+                            // Don't generate load when the session is offline.
+                            Session activeSession = Session.lookupSession(sessionID);
+                            if (activeSession == null || !activeSession.isLoggedOn()) {
+                                throttleFilter.release();
+                                continue;
+                            }
                             try {
                                 NewOrderSingle msg = ClientMessageSizer.buildMessage(filler);
                                 msg.set(new TransactTime());
